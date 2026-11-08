@@ -1,0 +1,16 @@
+{
+  "name": "CARWIN · Control Operativo",
+  "short_name": "CARWIN",
+  "description": "Control operativo y financiero de Automotora CARWIN",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#091522",
+  "theme_color": "#091522",
+  "lang": "es-CL",
+  "icons": [{
+    "src": "/assets/images/Logo_Oficial.jpeg",
+    "sizes": "512x512",
+    "type": "image/jpeg",
+    "purpose": "any maskable"
+  }]
+}
