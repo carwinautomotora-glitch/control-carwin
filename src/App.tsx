@@ -30,15 +30,19 @@ import {
   FileText,
   FileSignature,
   Calculator,
+  Landmark,
   ArrowRightLeft,
   Info,
   X,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { formatPercent, money } from '@/lib/format';
+import { SimuladorCuotas } from '@/components/SimuladorCuotas';
 import jsPDF from 'jspdf';
 
 const TODAY = new Date('2026-11-02T12:00:00');
 const DEFAULT_DAILY_STAY_COST = 3900;
+const DEFAULT_UF_VALUE = 47890;
 const MONTH_LABEL = 'Noviembre 2026';
 const MONTH_PREFIX = '2026-11';
 const ADDRESS_TEXT = 'Av. Vitacura 4607 Nivel -3 N°22\nCentro Comercial Paseo el Tamarugo';
@@ -48,7 +52,7 @@ type MaintenanceType = 'brand' | 'private' | 'none';
 type ExpenseType = 'wash' | 'extra';
 type ExpenseAllocation = 'carwin' | 'customer' | 'shared';
 type PaymentMethod = 'cash' | 'bank_draft' | 'bank_transfer' | 'card' | 'trade_in';
-type View = 'dashboard' | 'inventory' | 'expenses' | 'calculators';
+type View = 'dashboard' | 'inventory' | 'expenses' | 'calculators' | 'simulador';
 
 interface Vehicle {
   id: string;
@@ -126,6 +130,7 @@ interface CarwinSettings {
   card_fee_rate: number;
   transfer_tax_rate: number;
   transfer_fixed_cost: number;
+  uf_value: number;
 }
 
 interface GroupedExpense {
@@ -141,8 +146,6 @@ const initialVehicle: Omit<Vehicle, 'id' | 'status'> = {
   permit_expiry: '', soap_expiry: '', inspection_expiry: '', entered_at: '2026-11-02',
 };
 
-const money = (value: number) => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(value);
-const compactMoney = (value: number) => Math.abs(value) >= 1000000 ? `$${(value / 1000000).toFixed(1).replace('.', ',')}M` : money(value);
 const dateLabel = (value: string | null) => value ? new Intl.DateTimeFormat('es-CL', { day: '2-digit', month: 'short' }).format(new Date(`${value}T12:00:00`)).replace('.', '') : 'Sin fecha';
 const daysBetween = (date: string) => Math.max(1, Math.floor((TODAY.getTime() - new Date(`${date}T12:00:00`).getTime()) / 86400000) + 1);
 const isPhysical = (type: VehicleType) => type === 'own' || type === 'physical_consignment';
@@ -171,7 +174,7 @@ function App() {
   const [officeExpenses, setOfficeExpenses] = useState<OfficeExpense[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
   const [salePayments, setSalePayments] = useState<SalePayment[]>([]);
-  const [settings, setSettings] = useState<CarwinSettings>({ daily_stay_cost: DEFAULT_DAILY_STAY_COST, card_fee_rate: 1.8, transfer_tax_rate: 1.5, transfer_fixed_cost: 130000 });
+  const [settings, setSettings] = useState<CarwinSettings>({ daily_stay_cost: DEFAULT_DAILY_STAY_COST, card_fee_rate: 1.8, transfer_tax_rate: 1.5, transfer_fixed_cost: 130000, uf_value: DEFAULT_UF_VALUE });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
@@ -295,6 +298,7 @@ function App() {
         {view === 'inventory' && <Inventory vehicles={vehicles} sales={sales} vehicleExpenses={vehicleExpenses} search={search} setSearch={setSearch} onAdd={() => { setEditingVehicle(null); setShowVehicleForm(true); }} onEdit={(v) => { setEditingVehicle(null); setEditingVehicle(v); setShowVehicleForm(true); }} onDelete={removeVehicle} onSell={(v) => { setEditingSale(null); setSellingVehicle(v); }} onEditSale={(v, sale) => { setEditingSale(sale); setSellingVehicle(v); }} onRestoreSale={async (v, sale) => { const saleResult = await supabase.from('carwin_sales').update({ status: 'cancelled' }).eq('id', sale.id); const vehicleResult = await supabase.from('carwin_vehicles').update({ status: 'active' }).eq('id', v.id); if (saleResult.error || vehicleResult.error) { setError('No se pudo devolver el auto a activos.'); return; } void loadData(); }} onManageExpenses={setExpenseVehicle} />}
         {view === 'expenses' && <OfficeExpenses expenses={officeExpenses} onAdd={() => setShowOfficeForm(true)} onDelete={async (id) => { await supabase.from('carwin_office_expenses').delete().eq('id', id); setOfficeExpenses((items) => items.filter((item) => item.id !== id)); }} />}
         {view === 'calculators' && <Calculators settings={settings} />}
+        {view === 'simulador' && <SimuladorCuotas ufValue={settings.uf_value} />}
       </main>
 
       <nav className="bottom-nav">
@@ -302,11 +306,12 @@ function App() {
         <NavItem icon={<CarFront size={22} />} label="Stock" active={view === 'inventory'} onClick={() => setView('inventory')} badge={activeVehicles.length} />
         <NavItem icon={<ReceiptText size={22} />} label="Gastos" active={view === 'expenses'} onClick={() => setView('expenses')} />
         <NavItem icon={<Calculator size={22} />} label="Calculadoras" active={view === 'calculators'} onClick={() => setView('calculators')} />
+        <NavItem icon={<Landmark size={22} />} label="Simulador" active={view === 'simulador'} onClick={() => setView('simulador')} />
         <NavItem icon={<Settings2 size={22} />} label="Ajustes" active={false} onClick={() => setShowSettings(true)} />
       </nav>
 
       {showInfo && <InfoModal onClose={() => setShowInfo(false)} />}
-      {showSettings && <SettingsModal settings={settings} onClose={() => setShowSettings(false)} onSave={async (newSettings) => { const result = await supabase.from('carwin_settings').update({ daily_stay_cost: newSettings.daily_stay_cost, card_fee_rate: newSettings.card_fee_rate, transfer_tax_rate: newSettings.transfer_tax_rate, transfer_fixed_cost: newSettings.transfer_fixed_cost }).eq('id', true); if (result.error) { setError('No se pudo guardar la configuración.'); return; } setSettings(newSettings); setShowSettings(false); }} />}
+      {showSettings && <SettingsModal settings={settings} onClose={() => setShowSettings(false)} onSave={async (newSettings) => { const result = await supabase.from('carwin_settings').update({ daily_stay_cost: newSettings.daily_stay_cost, card_fee_rate: newSettings.card_fee_rate, transfer_tax_rate: newSettings.transfer_tax_rate, transfer_fixed_cost: newSettings.transfer_fixed_cost, uf_value: newSettings.uf_value }).eq('id', true); if (result.error) { setError('No se pudo guardar la configuración.'); return; } setSettings(newSettings); setShowSettings(false); }} />}
       {showVehicleForm && <VehicleForm vehicle={editingVehicle} onClose={() => { setShowVehicleForm(false); setEditingVehicle(null); }} onSave={saveVehicle} />}
       {showOfficeForm && <OfficeExpenseForm onClose={() => setShowOfficeForm(false)} onSave={addOfficeExpense} />}
       {expenseVehicle && <VehicleExpenseModal vehicle={expenseVehicle} expenses={vehicleExpenses.filter((e) => e.vehicle_id === expenseVehicle.id)} dailyStayCost={settings.daily_stay_cost} onClose={() => setExpenseVehicle(null)} onAdd={addVehicleExpense} onUpdate={updateVehicleExpense} onDelete={deleteVehicleExpense} />}
@@ -347,14 +352,14 @@ function Dashboard({ activeVehicles, monthUtility, monthSalesTotal, officeTotal,
   return <>
     <section className="hero-row"><div><p className="eyebrow">TABLERO GERENCIAL</p><h2>Buenos días, <span>CARWIN</span></h2><p className="muted">Vista consolidada de tu operación.</p></div><div className="month-chip"><CalendarDays size={17} />{MONTH_LABEL}<ChevronRight size={17} /></div></section>
     <section className="kpi-grid">
-      <KpiCard label="Utilidad neta del mes" value={compactMoney(monthUtility)} detail={`Utilidad ventas ${compactMoney(monthSalesTotal)} - Oficina ${compactMoney(officeTotal)}`} icon={<TrendingUp size={19} />} tone={utilityTone} trend={monthUtility >= 0 ? 'Positivo' : 'Negativo'} />
-      <KpiCard label="Gastos de oficina" value={compactMoney(officeTotal)} detail="Acumulado mensual" icon={<Wallet size={19} />} tone="amber" />
-      <KpiCard label="Utilidad potencial" value={compactMoney(potentialProfit)} detail="Margen del stock activo" icon={<CircleDollarSign size={19} />} tone="blue" trend="+12.4%" />
+      <KpiCard label="Utilidad neta del mes" value={money(monthUtility)} detail={`Utilidad ventas ${money(monthSalesTotal)} - Oficina ${money(officeTotal)}`} icon={<TrendingUp size={19} />} tone={utilityTone} trend={monthUtility >= 0 ? 'Positivo' : 'Negativo'} />
+      <KpiCard label="Gastos de oficina" value={money(officeTotal)} detail="Acumulado mensual" icon={<Wallet size={19} />} tone="amber" />
+      <KpiCard label="Utilidad potencial" value={money(potentialProfit)} detail="Margen del stock activo" icon={<CircleDollarSign size={19} />} tone="blue" trend="+12.4%" />
     </section>
     <section className={`alert-strip ${documentationAlerts > 0 || physicalAging > 0 ? 'has-alerts' : 'clear-alerts'}`}><div className="alert-title"><div className="alert-icon"><AlertTriangle size={20} /></div><div><strong>Atención operativa</strong><p>Revisa estos puntos antes de cerrar el mes</p></div></div><div className="alert-stat"><strong>{documentationAlerts}</strong><span>docs por vencer</span></div><div className="alert-stat"><strong>{physicalAging}</strong><span>autos +60 días</span></div></section>
     <section className="section-heading"><div><p className="eyebrow">RENDIMIENTO DE STOCK</p><h3>Vehículos destacados</h3></div><button className="text-button" onClick={onSeeInventory}>Ver todo <ChevronRight size={18} /></button></section>
     <section className="vehicle-list">{topVehicles.map((v) => <VehicleRow key={v.id} vehicle={v} margin={calculateVehicleMargin(v, vehicleExpenses)} expenseTotal={calculateVehicleExpenseTotal(v, vehicleExpenses)} onSell={() => onSell(v)} onManageExpenses={() => onManageExpenses(v)} />)}</section>
-    <section className="quick-actions"><button onClick={onSeeInventory}><Plus size={20} /><span><strong>Ingresar vehículo</strong><small>Agregar al stock actual</small></span><ChevronRight size={19} /></button><button onClick={() => document.getElementById('monthly-analysis')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}><BarChart3 size={20} /><span><strong>Ver análisis mensual</strong><small>Rendimiento de noviembre 2026</small></span><ChevronRight size={19} /></button></section><section id="monthly-analysis" className="monthly-analysis"><div className="section-heading"><div><p className="eyebrow">ANÁLISIS MENSUAL</p><h3>Noviembre 2026</h3></div><BarChart3 size={26} /></div><div className="analysis-grid"><div className="analysis-stat"><span>Ventas concretadas</span><strong>{monthSalesTotal > 0 ? 'Con actividad' : 'Sin ventas aún'}</strong><small>Utilidad de ventas: {compactMoney(monthSalesTotal)}</small></div><div className="analysis-stat"><span>Gastos de oficina</span><strong>{compactMoney(officeTotal)}</strong><small>Registrados durante el mes</small></div><div className={`analysis-stat ${monthUtility >= 0 ? 'positive' : 'negative'}`}><span>Resultado neto</span><strong>{compactMoney(monthUtility)}</strong><small>{monthUtility >= 0 ? 'Resultado favorable' : 'Requiere revisión'}</small></div></div><div className="analysis-bars"><div><span><b>Ventas</b><strong>{compactMoney(monthSalesTotal)}</strong></span><i><em style={{ width: `${monthSalesTotal > 0 ? '100%' : '4%'}` }} /></i></div><div><span><b>Gastos oficina</b><strong>{compactMoney(officeTotal)}</strong></span><i><em className="orange-bar" style={{ width: `${monthSalesTotal > 0 ? `${Math.max(4, Math.min(100, Math.round((officeTotal / monthSalesTotal) * 100)))}%` : officeTotal > 0 ? '100%' : '4%'}` }} /></i></div><div><span><b>Utilidad neta</b><strong>{compactMoney(Math.max(0, monthUtility))}</strong></span><i><em className="green-bar" style={{ width: `${monthSalesTotal > 0 ? `${Math.max(4, Math.min(100, Math.round((Math.max(0, monthUtility) / monthSalesTotal) * 100)))}%` : '4%'}` }} /></i></div></div></section>
+    <section className="quick-actions"><button onClick={onSeeInventory}><Plus size={20} /><span><strong>Ingresar vehículo</strong><small>Agregar al stock actual</small></span><ChevronRight size={19} /></button><button onClick={() => document.getElementById('monthly-analysis')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}><BarChart3 size={20} /><span><strong>Ver análisis mensual</strong><small>Rendimiento de noviembre 2026</small></span><ChevronRight size={19} /></button></section><section id="monthly-analysis" className="monthly-analysis"><div className="section-heading"><div><p className="eyebrow">ANÁLISIS MENSUAL</p><h3>Noviembre 2026</h3></div><BarChart3 size={26} /></div><div className="analysis-grid"><div className="analysis-stat"><span>Ventas concretadas</span><strong>{monthSalesTotal > 0 ? 'Con actividad' : 'Sin ventas aún'}</strong><small>Utilidad de ventas: {money(monthSalesTotal)}</small></div><div className="analysis-stat"><span>Gastos de oficina</span><strong>{money(officeTotal)}</strong><small>Registrados durante el mes</small></div><div className={`analysis-stat ${monthUtility >= 0 ? 'positive' : 'negative'}`}><span>Resultado neto</span><strong>{money(monthUtility)}</strong><small>{monthUtility >= 0 ? 'Resultado favorable' : 'Requiere revisión'}</small></div></div><div className="analysis-bars"><div><span><b>Ventas</b><strong>{money(monthSalesTotal)}</strong></span><i><em style={{ width: `${monthSalesTotal > 0 ? '100%' : '4%'}` }} /></i></div><div><span><b>Gastos oficina</b><strong>{money(officeTotal)}</strong></span><i><em className="orange-bar" style={{ width: `${monthSalesTotal > 0 ? `${Math.max(4, Math.min(100, Math.round((officeTotal / monthSalesTotal) * 100)))}%` : officeTotal > 0 ? '100%' : '4%'}` }} /></i></div><div><span><b>Utilidad neta</b><strong>{money(Math.max(0, monthUtility))}</strong></span><i><em className="green-bar" style={{ width: `${monthSalesTotal > 0 ? `${Math.max(4, Math.min(100, Math.round((Math.max(0, monthUtility) / monthSalesTotal) * 100)))}%` : '4%'}` }} /></i></div></div></section>
   </>;
 }
 
@@ -375,16 +380,16 @@ function OfficeExpenses({ expenses, onAdd, onDelete }: { expenses: OfficeExpense
 
 function VehicleRow({ vehicle, margin, expenseTotal, onSell, onManageExpenses }: { vehicle: Vehicle; margin: number; expenseTotal: number; onSell: () => void; onManageExpenses: () => void }) {
   const days = daysBetween(vehicle.entered_at);
-  return <div className={`vehicle-row ${margin < 0 ? 'negative-row' : ''}`}><div className="vehicle-avatar"><CarFront size={22} /></div><div className="vehicle-main"><strong>{vehicle.model}</strong><div><span>{typeLabel(vehicle.vehicle_type)}</span><i /> <span>{days} días en stock</span></div></div><div className="vehicle-cost"><span>Gastos acumulados</span><strong>{compactMoney(expenseTotal)}</strong></div><div className="vehicle-margin"><span>Margen real</span><strong className={margin < 0 ? 'negative' : ''}>{compactMoney(margin)}</strong></div><button className="row-action" onClick={onManageExpenses} title="Gastos del vehículo"><Wallet size={17} /></button><button className="sell-button" onClick={onSell}>Vender</button></div>;
+  return <div className={`vehicle-row ${margin < 0 ? 'negative-row' : ''}`}><div className="vehicle-avatar"><CarFront size={22} /></div><div className="vehicle-main"><strong>{vehicle.model}</strong><div><span>{typeLabel(vehicle.vehicle_type)}</span><i /> <span>{days} días en stock</span></div></div><div className="vehicle-cost"><span>Gastos acumulados</span><strong>{money(expenseTotal)}</strong></div><div className="vehicle-margin"><span>Margen real</span><strong className={margin < 0 ? 'negative' : ''}>{money(margin)}</strong></div><button className="row-action" onClick={onManageExpenses} title="Gastos del vehículo"><Wallet size={17} /></button><button className="sell-button" onClick={onSell}>Vender</button></div>;
 }
 
 function InventoryCard({ vehicle, sale, expenseTotal, margin, onEdit, onDelete, onSell, onEditSale, onRestoreSale, onManageExpenses, onContract }: { vehicle: Vehicle; sale?: Sale; expenseTotal: number; margin: number; onEdit: () => void; onDelete: () => void; onSell: () => void; onEditSale: (sale: Sale) => void; onRestoreSale: (sale: Sale) => void; onManageExpenses: () => void; onContract: () => void }) {
   const days = daysBetween(vehicle.entered_at); const aging = days > 90 ? 'red' : days > 60 ? 'yellow' : 'green'; const documentCount = expiringDocuments(vehicle); const hasAlert = documentCount > 0 || aging === 'red' || margin < 0;
-  return <article className={`inventory-card ${hasAlert ? 'has-risk' : ''}`}><div className="card-top"><div className="vehicle-avatar large"><CarFront size={23} /></div><div className="card-title"><strong>{vehicle.model}</strong><span>{vehicle.plate || 'PATENTE PENDIENTE'} · {vehicle.color}</span></div><button className="more-button"><MoreHorizontal size={20} /></button></div><div className="tag-row"><span className={`type-tag ${vehicle.vehicle_type}`}>{vehicle.vehicle_type === 'virtual_consignment' ? 'Virtual' : vehicle.vehicle_type === 'own' ? 'Propio' : 'Físico'}</span>{vehicle.status === 'sold' && <span className="sold-tag"><Check size={12} /> Vendido</span>}<span className={`aging-tag ${aging}`}><i /> {days} días</span>{documentCount > 0 && <span className="doc-tag"><AlertTriangle size={13} /> {documentCount} alerta{documentCount > 1 ? 's' : ''}</span>}</div><div className="price-grid"><div><small>Precio compra</small><strong>{compactMoney(vehicle.purchase_price)}</strong></div><div><small>Precio venta</small><strong>{compactMoney(vehicle.sale_price)}</strong></div><div><small>Margen real</small><strong className={margin < 0 ? 'negative' : 'positive'}>{compactMoney(margin)}</strong></div></div><div className="expense-balance"><span><Wallet size={14} /> Gastos acumulados</span><strong>{money(expenseTotal)}</strong></div><div className="card-footer"><span><Clock3 size={15} /> Ingreso {dateLabel(vehicle.entered_at)}</span><div><button className="row-action" onClick={onManageExpenses} title="Gastos"><Wallet size={16} /></button><button className="row-action" onClick={onEdit}><Pencil size={16} /></button><button className="row-action" onClick={onDelete}><Trash2 size={16} /></button>{vehicle.status === 'active' && <button className="mini-sell" onClick={onSell}>Vender</button>}{vehicle.status === 'active' && vehicle.vehicle_type !== 'own' && <button className="contract-button" onClick={onContract} title="Generar contrato de consignación"><FileSignature size={15} /> Contrato</button>}{vehicle.status === 'sold' && sale && <><button className="mini-sell edit-sale-button" onClick={() => onEditSale(sale)}>Editar venta</button><button className="restore-button" onClick={() => onRestoreSale(sale)}>Volver a activos</button></>}</div></div></article>;
+  return <article className={`inventory-card ${hasAlert ? 'has-risk' : ''}`}><div className="card-top"><div className="vehicle-avatar large"><CarFront size={23} /></div><div className="card-title"><strong>{vehicle.model}</strong><span>{vehicle.plate || 'PATENTE PENDIENTE'} · {vehicle.color}</span></div><button className="more-button"><MoreHorizontal size={20} /></button></div><div className="tag-row"><span className={`type-tag ${vehicle.vehicle_type}`}>{vehicle.vehicle_type === 'virtual_consignment' ? 'Virtual' : vehicle.vehicle_type === 'own' ? 'Propio' : 'Físico'}</span>{vehicle.status === 'sold' && <span className="sold-tag"><Check size={12} /> Vendido</span>}<span className={`aging-tag ${aging}`}><i /> {days} días</span>{documentCount > 0 && <span className="doc-tag"><AlertTriangle size={13} /> {documentCount} alerta{documentCount > 1 ? 's' : ''}</span>}</div><div className="price-grid"><div><small>Precio compra</small><strong>{money(vehicle.purchase_price)}</strong></div><div><small>Precio venta</small><strong>{money(vehicle.sale_price)}</strong></div><div><small>Margen real</small><strong className={margin < 0 ? 'negative' : 'positive'}>{money(margin)}</strong></div></div><div className="expense-balance"><span><Wallet size={14} /> Gastos acumulados</span><strong>{money(expenseTotal)}</strong></div><div className="card-footer"><span><Clock3 size={15} /> Ingreso {dateLabel(vehicle.entered_at)}</span><div><button className="row-action" onClick={onManageExpenses} title="Gastos"><Wallet size={16} /></button><button className="row-action" onClick={onEdit}><Pencil size={16} /></button><button className="row-action" onClick={onDelete}><Trash2 size={16} /></button>{vehicle.status === 'active' && <button className="mini-sell" onClick={onSell}>Vender</button>}{vehicle.status === 'active' && vehicle.vehicle_type !== 'own' && <button className="contract-button" onClick={onContract} title="Generar contrato de consignación"><FileSignature size={15} /> Contrato</button>}{vehicle.status === 'sold' && sale && <><button className="mini-sell edit-sale-button" onClick={() => onEditSale(sale)}>Editar venta</button><button className="restore-button" onClick={() => onRestoreSale(sale)}>Volver a activos</button></>}</div></div></article>;
 }
 
 function KpiCard({ label, value, detail, icon, tone, trend }: { label: string; value: string; detail: string; icon: ReactNode; tone: string; trend?: string }) { return <div className={`kpi-card ${tone}`}><div className="kpi-head"><span>{label}</span><div className="kpi-icon">{icon}</div></div><strong>{value}</strong><div className="kpi-foot"><span>{detail}</span>{trend && <em><ArrowUpRight size={15} />{trend}</em>}</div></div>; }
-function NavItem({ icon, label, active, onClick, badge }: { icon: ReactNode; label: string; active: boolean; onClick: () => void; badge?: number }) { return <button className={`nav-item ${active ? 'active' : ''}`} onClick={onClick}>{icon}<span>{label}</span>{badge ? <b>{badge}</b> : null}</button>; }
+function NavItem({ icon, label, active, onClick, badge }: { icon: ReactNode; label: string; active: boolean; onClick: () => void; badge?: number }) { return <button className={`nav-item ${active ? 'active' : ''}`} onClick={onClick} aria-label={label} title={label}>{icon}<span>{label}</span>{badge ? <b>{badge}</b> : null}</button>; }
 function EmptyState({ text }: { text: string }) { return <div className="empty-state"><Clipboard size={22} /><p>{text}</p></div>; }
 
 function InfoModal({ onClose }: { onClose: () => void }) {
@@ -493,38 +498,15 @@ function SaleModal({ vehicle, sale, dailyStayCost, payments, onAddPayment, onDel
     if (!liquidationRef.current) return;
     setExporting(true);
     try {
-      const fontCs = `@font-face{font-family:'DM Sans';font-style:normal;font-weight:400;src:url(https://fonts.gstatic.com/s/dmsans/v15/PumbUy5fUHfnkB_nt5YDaw.woff2) format('woff2');}@font-face{font-family:'DM Sans';font-style:normal;font-weight:500;src:url(https://fonts.gstatic.com/s/dmsans/v15/ifUpo9N9TWquvSsCX6B9pw.woff2) format('woff2');}@font-face{font-family:'DM Sans';font-style:normal;font-weight:600;src:url(https://fonts.gstatic.com/s/dmsans/v15/U8YNi5H5OZ3RskChRwBgTw.woff2) format('woff2');}@font-face{font-family:'DM Sans';font-style:normal;font-weight:700;src:url(https://fonts.gstatic.com/s/dmsans/v15/ifopbHfUnBAwPudRyITdzQ.woff2) format('woff2');}@font-face{font-family:'Space Grotesk';font-style:normal;font-weight:500;src:url(https://fonts.gstatic.com/s/spacegrotesk/v16/FMidJyI5HfLPot/2ld/876W.woff2) format('woff2');}@font-face{font-family:'Space Grotesk';font-style:normal;font-weight:600;src:url(https://fonts.gstatic.com/s/spacegrotesk/v16/FMidRyI5HfLPot/2ld/876W.woff2) format('woff2');}@font-face{font-family:'Space Grotesk';font-style:normal;font-weight:700;src:url(https://fonts.gstatic.com/s/spacegrotesk/v16/FMid_gFyI5HfLPot/2ld/876W.woff2) format('woff2');}`;
-
-      const node = liquidationRef.current;
-      const computed = window.getComputedStyle(node);
-      const width = node.scrollWidth;
-      const height = node.scrollHeight;
-
-      const clone = node.cloneNode(true) as HTMLElement;
-      clone.style.fontFamily = computed.fontFamily;
-      clone.style.width = `${width}px`;
-
-      const html = `<foreignObject x="0" y="0" width="${width}" height="${height}"><div xmlns="http://www.w3.org/1999/xhtml" style="font-family:'DM Sans',sans-serif;width:${width}px;height:${height}px;">${clone.innerHTML}</div></foreignObject>`;
-      const svgString = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><style>${fontCs}</style>${html}</svg>`;
-      const svgDataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgString)}`;
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.src = svgDataUrl;
-      await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; });
-      const canvas = document.createElement('canvas');
-      canvas.width = width * 2;
-      canvas.height = height * 2;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-      ctx.fillStyle = '#0a1929';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.scale(2, 2);
-      ctx.drawImage(img, 0, 0);
-      const dataUrl = canvas.toDataURL('image/png');
+      const canvas = await html2canvas(liquidationRef.current, { backgroundColor: '#0a1929', scale: 2, useCORS: true });
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+      if (!blob) throw new Error('No se pudo generar la imagen');
+      const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.download = `liquidacion-${vehicle.model.replace(/[^a-zA-Z0-9]/g, '')}.png`;
-      link.href = dataUrl;
+      link.href = url;
       link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch {
       setExportError('No se pudo exportar la imagen. Intenta copiar el resumen.');
     } finally {
@@ -663,14 +645,16 @@ function SettingsModal({ settings, onClose, onSave }: { settings: CarwinSettings
   const [cardFee, setCardFee] = useState(settings.card_fee_rate.toString());
   const [transferTax, setTransferTax] = useState(settings.transfer_tax_rate.toString());
   const [transferFixed, setTransferFixed] = useState(settings.transfer_fixed_cost.toString());
+  const [ufValue, setUfValue] = useState(settings.uf_value.toString());
   const [saving, setSaving] = useState(false);
-  const submit = async (event: FormEvent) => { event.preventDefault(); setSaving(true); try { await onSave({ daily_stay_cost: Number(dailyStay) || 0, card_fee_rate: Number(cardFee) || 0, transfer_tax_rate: Number(transferTax) || 0, transfer_fixed_cost: Number(transferFixed) || 0 }); } finally { setSaving(false); } };
+  const submit = async (event: FormEvent) => { event.preventDefault(); setSaving(true); try { await onSave({ daily_stay_cost: Number(dailyStay) || 0, card_fee_rate: Number(cardFee) || 0, transfer_tax_rate: Number(transferTax) || 0, transfer_fixed_cost: Number(transferFixed) || 0, uf_value: Number(ufValue) || 0 }); } finally { setSaving(false); } };
   return <Modal title="Configuración operativa" onClose={onClose}><form className="single-form" onSubmit={submit}>
     <div className="form-section-title">Costos operativos</div>
     <Field label="Costo diario de estadía (CLP)"><input min="0" type="number" value={dailyStay} onChange={(e) => setDailyStay(e.target.value)} /></Field>
     <Field label="Comisión tarjeta (%)"><input min="0" step="0.1" type="number" value={cardFee} onChange={(e) => setCardFee(e.target.value)} /></Field>
     <Field label="Impuesto transferencia (%)"><input min="0" step="0.1" type="number" value={transferTax} onChange={(e) => setTransferTax(e.target.value)} /></Field>
     <Field label="Costo fijo transferencia (CLP)"><input min="0" type="number" value={transferFixed} onChange={(e) => setTransferFixed(e.target.value)} /></Field>
+    <Field label="Valor UF (CLP)"><input min="0" type="number" value={ufValue} onChange={(e) => setUfValue(e.target.value)} /></Field>
     <p className="form-hint">El costo diario de estadía se aplica automáticamente a vehículos propios y consignaciones físicas.</p>
     <div className="form-actions"><button type="button" className="secondary-button" onClick={onClose}>Cancelar</button><button type="submit" className="primary-button" disabled={saving}>{saving ? 'Guardando...' : 'Guardar configuración'}</button></div>
   </form></Modal>;
@@ -699,7 +683,7 @@ function CardFeeCalculator({ rate }: { rate: number }) {
   const grossNeeded = mode === 'surcharge' ? amt / (1 - r / 100) : 0;
   const surcharge = mode === 'surcharge' ? grossNeeded - amt : 0;
   return <div className="calc-card">
-    <div className="calc-title"><CreditCard size={22} /><div><h3>Comisión por tarjetas</h3><small>Tasa configurable — actualmente {r}%</small></div></div>
+    <div className="calc-title"><CreditCard size={22} /><div><h3>Comisión por tarjetas</h3><small>Tasa configurable — actualmente {formatPercent(r)}</small></div></div>
     <div className="calc-tabs">
       <button className={mode === 'absorb' ? 'active' : ''} onClick={() => setMode('absorb')}>A. CARWIN absorbe el costo</button>
       <button className={mode === 'surcharge' ? 'active' : ''} onClick={() => setMode('surcharge')}>B. CARWIN recibe un monto neto</button>
@@ -711,11 +695,11 @@ function CardFeeCalculator({ rate }: { rate: number }) {
     {amt > 0 && <div className="calc-result">
       {mode === 'absorb' ? <>
         <div className="calc-result-row"><span>Monto original cobrado</span><strong>{money(amt)}</strong></div>
-        <div className="calc-result-row warn"><span>Comisión ({r}%)</span><strong>-{money(fee)}</strong></div>
+        <div className="calc-result-row warn"><span>Comisión ({formatPercent(r)})</span><strong>-{money(fee)}</strong></div>
         <div className="calc-result-row total"><span>Neto final recibido</span><strong>{money(netReceived)}</strong></div>
       </> : <>
         <div className="calc-result-row"><span>Monto neto deseado</span><strong>{money(amt)}</strong></div>
-        <div className="calc-result-row warn"><span>Comisión ({r}%)</span><strong>{money(grossNeeded * (r / 100))}</strong></div>
+        <div className="calc-result-row warn"><span>Comisión ({formatPercent(r)})</span><strong>{money(grossNeeded * (r / 100))}</strong></div>
         <div className="calc-result-row"><span>Adicional necesario al cliente</span><strong>+{money(surcharge)}</strong></div>
         <div className="calc-result-row highlight"><span>Total a cobrar (bruto)</span><strong>{money(grossNeeded)}</strong></div>
         <div className="calc-result-row total"><span>Neto final recibido</span><strong>{money(amt)}</strong></div>
@@ -749,7 +733,7 @@ function TransferCalculator({ taxRate, fixedCost }: { taxRate: number; fixedCost
     </div>
     {base > 0 && <div className="calc-result">
       <div className="calc-result-row"><span>Base imponible (mayor valor)</span><strong>{money(base)}</strong></div>
-      <div className="calc-result-row warn"><span>Impuesto ({tp}%)</span><strong>{money(tax)}</strong></div>
+      <div className="calc-result-row warn"><span>Impuesto ({formatPercent(tp)})</span><strong>{money(tax)}</strong></div>
       <div className="calc-result-row"><span>Gastos adicionales</span><strong>{money(ec)}</strong></div>
       <div className="calc-result-row total"><span>Costo estimado total</span><strong>{money(total)}</strong></div>
       <div className="calc-result-row"><span>Asume el costo</span><strong>{whoPays === 'buyer' ? 'Comprador' : whoPays === 'seller' ? 'Vendedor' : whoPays === 'carwin' ? 'CARWIN' : 'Compartido'}</strong></div>

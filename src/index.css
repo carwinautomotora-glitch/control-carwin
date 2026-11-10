@@ -432,11 +432,13 @@ button { cursor: pointer; }
   .vehicle-cost span { font-size: 10px; }
   .vehicle-cost strong { font-size: 12px; }
   .sell-button { padding: 8px 10px; }
-  .inventory-grid { grid-template-columns: 1fr; }
+  .inventory-grid { grid-template-columns: minmax(0, 1fr); }
+  .inventory-card { min-width: 0; overflow-wrap: anywhere; }
   .page-heading { align-items: end; }
   .page-heading .primary-button { padding: 11px; font-size: 13px; }
   .quick-actions { grid-template-columns: 1fr; }
-  .nav-item { padding: 8px 16px; }
+  .nav-item { padding: 8px 10px; }
+  .nav-item > span { display: none; }
   .form-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
   .modal { padding: 18px; border-radius: 19px; }
   .price-grid strong { font-size: 14px; }
