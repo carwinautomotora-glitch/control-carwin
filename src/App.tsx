@@ -39,6 +39,7 @@ import { supabase } from '@/lib/supabase';
 import { formatPercent, money } from '@/lib/format';
 import { SimuladorCuotas } from '@/components/SimuladorCuotas';
 import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 const TODAY = new Date('2026-11-02T12:00:00');
 const DEFAULT_DAILY_STAY_COST = 3900;
@@ -501,13 +502,20 @@ function SaleModal({ vehicle, sale, dailyStayCost, payments, onAddPayment, onDel
       const canvas = await html2canvas(liquidationRef.current, { backgroundColor: '#0a1929', scale: 2, useCORS: true });
       const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
       if (!blob) throw new Error('No se pudo generar la imagen');
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.download = `liquidacion-${vehicle.model.replace(/[^a-zA-Z0-9]/g, '')}.png`;
-      link.href = url;
-      link.click();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch {
+      const fileName = `liquidacion-${vehicle.model.replace(/[^a-zA-Z0-9]/g, '')}.png`;
+      const file = new File([blob], fileName, { type: 'image/png' });
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], title: `Liquidación ${vehicle.model}` });
+      } else {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.download = fileName;
+        link.href = url;
+        link.click();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
       setExportError('No se pudo exportar la imagen. Intenta copiar el resumen.');
     } finally {
       setExporting(false);
