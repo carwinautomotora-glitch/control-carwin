@@ -38,6 +38,7 @@ import {
 import { supabase } from '@/lib/supabase';
 import { formatPercent, money } from '@/lib/format';
 import { SimuladorCuotas } from '@/components/SimuladorCuotas';
+import { BalanceResumen } from '@/components/BalanceResumen';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
@@ -295,7 +296,7 @@ function App() {
 
       <main className="main-content">
         {error && <div className="error-banner"><AlertTriangle size={18} />{error}<button onClick={() => setError('')}><X size={17} /></button></div>}
-        {view === 'dashboard' && <Dashboard activeVehicles={activeVehicles} monthUtility={monthUtility} monthSalesTotal={monthSalesTotal} officeTotal={officeTotal} potentialProfit={potentialProfit} documentationAlerts={documentationAlerts} physicalAging={physicalAging} onSeeInventory={() => setView('inventory')} onSell={setSellingVehicle} onManageExpenses={setExpenseVehicle} vehicleExpenses={vehicleExpenses} />}
+        {view === 'dashboard' && <><Dashboard activeVehicles={activeVehicles} monthUtility={monthUtility} monthSalesTotal={monthSalesTotal} officeTotal={officeTotal} potentialProfit={potentialProfit} documentationAlerts={documentationAlerts} physicalAging={physicalAging} onSeeInventory={() => setView('inventory')} onSell={setSellingVehicle} onManageExpenses={setExpenseVehicle} vehicleExpenses={vehicleExpenses} /><BalanceResumen /></>}
         {view === 'inventory' && <Inventory vehicles={vehicles} sales={sales} vehicleExpenses={vehicleExpenses} search={search} setSearch={setSearch} onAdd={() => { setEditingVehicle(null); setShowVehicleForm(true); }} onEdit={(v) => { setEditingVehicle(null); setEditingVehicle(v); setShowVehicleForm(true); }} onDelete={removeVehicle} onSell={(v) => { setEditingSale(null); setSellingVehicle(v); }} onEditSale={(v, sale) => { setEditingSale(sale); setSellingVehicle(v); }} onRestoreSale={async (v, sale) => { const saleResult = await supabase.from('carwin_sales').update({ status: 'cancelled' }).eq('id', sale.id); const vehicleResult = await supabase.from('carwin_vehicles').update({ status: 'active' }).eq('id', v.id); if (saleResult.error || vehicleResult.error) { setError('No se pudo devolver el auto a activos.'); return; } void loadData(); }} onManageExpenses={setExpenseVehicle} />}
         {view === 'expenses' && <OfficeExpenses expenses={officeExpenses} onAdd={() => setShowOfficeForm(true)} onDelete={async (id) => { await supabase.from('carwin_office_expenses').delete().eq('id', id); setOfficeExpenses((items) => items.filter((item) => item.id !== id)); }} />}
         {view === 'calculators' && <Calculators settings={settings} />}
