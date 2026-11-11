@@ -131,7 +131,7 @@ export function BalanceResumen() {
       <div className="section-heading">
         <div>
           <p className="eyebrow">BALANCE CONTABLE</p>
-          <h3>Balance agosto 2026 a la fecha</h3>
+          <h3>Balance desde el inicio a la fecha</h3>
           <p className="muted">Movimientos desde el {formatDate(firstDate)} hasta el {formatDate(summary.asOf)}.</p>
         </div>
         <Wallet size={26} />
@@ -160,7 +160,7 @@ export function BalanceResumen() {
         </div>
       </div>
 
-      <section className="summary-card">
+      <section className="summary-card timeline-card">
         <div className="section-heading compact">
           <div>
             <p className="eyebrow">CRONOLOGÍA</p>
@@ -168,6 +168,13 @@ export function BalanceResumen() {
           </div>
           <CalendarDays size={22} />
         </div>
+        <div className="timeline-track">
+          <div className="timeline-node complete"><span>Inicio</span><strong>Julio 2026</strong><small>Capital inicial y primeros gastos</small></div>
+          <div className="timeline-node complete"><span>Construcción</span><strong>Agosto 2026</strong><small>Compras, vehículos y operación</small></div>
+          <div className="timeline-node current"><span>Situación actual</span><strong>Septiembre 2026</strong><small>Balance contable cargado</small></div>
+          <div className="timeline-node pending"><span>Siguiente corte</span><strong>Octubre 2026</strong><small>Falta incorporar el balance</small></div>
+        </div>
+        <div className="monthly-lines">
         {monthly.months.map((key, index) => {
           const totals = monthly.monthTotals.get(key);
           return (
@@ -179,6 +186,7 @@ export function BalanceResumen() {
             </div>
           );
         })}
+        </div>
         <p className="muted">Octubre de 2026 aún no está cargado en el balance.</p>
       </section>
 

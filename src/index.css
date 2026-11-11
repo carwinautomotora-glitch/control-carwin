@@ -589,7 +589,7 @@ body, .app-shell { background: #061426; }
 .monthly-analysis { scroll-margin-top: 22px; margin-top: 30px; padding: 22px; border: 3px solid #00E5F2; border-radius: 18px; background: #0B2C50; box-shadow: 0 0 0 4px rgba(0,229,242,.12); }
 .monthly-analysis > .section-heading { margin-bottom: 18px; }
 .monthly-analysis > .section-heading svg { color: #00E5F2; }
-.analysis-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.analysis-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
 .analysis-stat { padding: 16px; border: 2px solid #6AA8E0; border-radius: 12px; background: #061426; }
 .analysis-stat span, .analysis-stat strong, .analysis-stat small { display: block; }
 .analysis-stat span { color: #E2F0FF; font-size: 13px; font-weight: 700; }
@@ -607,4 +607,17 @@ body, .app-shell { background: #061426; }
 .analysis-bars em { display: block; height: 100%; min-width: 4px; background: #38B6FF; border-radius: 5px; }
 .analysis-bars em.orange-bar { background: #FF7A00; }
 .analysis-bars em.green-bar { background: #00D99A; }
-@media (max-width: 680px) { .analysis-grid { grid-template-columns: 1fr; } .monthly-analysis { padding: 16px; } }
+.timeline-track { position: relative; display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin: 22px 0 20px; }
+.timeline-track::before { content: ''; position: absolute; top: 15px; left: 7%; right: 7%; height: 3px; background: #4C86BF; }
+.timeline-node { position: relative; z-index: 1; display: grid; gap: 5px; padding-top: 30px; }
+.timeline-node::before { content: ''; position: absolute; top: 8px; left: 0; width: 16px; height: 16px; border: 3px solid #0B2C50; border-radius: 50%; background: #6AA8E0; box-shadow: 0 0 0 2px #6AA8E0; }
+.timeline-node.complete::before { background: #00D99A; box-shadow: 0 0 0 2px #00D99A; }
+.timeline-node.current::before { background: #38B6FF; box-shadow: 0 0 0 2px #38B6FF, 0 0 0 7px rgba(56,182,255,.16); }
+.timeline-node.pending::before { background: #FFB000; box-shadow: 0 0 0 2px #FFB000; }
+.timeline-node span { color: #BDD8F0; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+.timeline-node strong { color: #FFFFFF; font: 700 16px 'Space Grotesk'; }
+.timeline-node small { color: #E2F0FF; font-size: 12px; line-height: 1.45; }
+.monthly-lines { display: grid; gap: 10px; }
+.monthly-lines .summary-line { margin-top: 0; padding-top: 10px; }
+@media (max-width: 880px) { .analysis-grid { grid-template-columns: repeat(2, 1fr); } .timeline-track { grid-template-columns: repeat(2, 1fr); gap: 20px 14px; } .timeline-track::before { display: none; } }
+@media (max-width: 680px) { .analysis-grid { grid-template-columns: 1fr; } .monthly-analysis { padding: 16px; } .timeline-track { grid-template-columns: 1fr; gap: 14px; } .timeline-node { padding: 0 0 0 30px; } .timeline-node::before { top: 2px; } }
