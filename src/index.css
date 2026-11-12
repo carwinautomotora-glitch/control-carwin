@@ -644,3 +644,32 @@ body, .app-shell { background: #061426; }
 .report-result b { color: #FFFFFF; margin-top: 4px; }
 @media (max-width: 880px) { .analysis-grid { grid-template-columns: repeat(2, 1fr); } .timeline-track { grid-template-columns: repeat(2, 1fr); gap: 20px 14px; } .timeline-track::before { display: none; } }
 @media (max-width: 680px) { .analysis-grid { grid-template-columns: 1fr; } .monthly-analysis { padding: 16px; } .timeline-track { grid-template-columns: 1fr; gap: 14px; } .timeline-node { padding: 0 0 0 30px; } .timeline-node::before { top: 2px; } }
+
+/* Stay days editable input */
+.stay-edit-row { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
+.stay-days-input { width: 70px; background: #061426; border: 2px solid #00E5F2; border-radius: 6px; color: #FFFFFF; padding: 4px 8px; font-weight: 700; font-size: 14px; }
+.stay-edit-row span { color: #E2F0FF; font-size: 13px; }
+
+/* Report search */
+.report-search-totals { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 16px 0; }
+.report-search-total { padding: 16px; border: 2px solid #6AA8E0; border-radius: 12px; background: #061426; }
+.report-search-total span { display: block; color: #E2F0FF; font-size: 13px; font-weight: 700; }
+.report-search-total strong { display: block; color: #FFFFFF; font: 700 22px 'Space Grotesk'; margin-top: 8px; }
+.report-month-buckets { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+.report-month-buckets > div { display: flex; flex-direction: column; gap: 4px; padding: 10px 14px; border: 1px solid #4C86BF; border-radius: 9px; background: #061426; min-width: 110px; }
+.report-month-buckets span { color: #BDD8F0; font-size: 12px; }
+.report-month-buckets b { color: #FFFFFF; font: 700 15px 'Space Grotesk'; }
+.report-search-list { display: grid; gap: 7px; max-height: 420px; overflow-y: auto; }
+.report-search-row { display: grid; grid-template-columns: 80px 160px 1fr auto; gap: 10px; align-items: center; padding: 12px; border: 1px solid #4C86BF; border-radius: 10px; background: #12375F; }
+.report-search-date { color: #BDD8F0; font-size: 13px; white-space: nowrap; }
+.report-search-origin { color: #00E5F2; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.report-search-desc { color: #FFFFFF; font-size: 14px; }
+.report-search-amount { color: #FFFFFF; font: 700 16px 'Space Grotesk'; white-space: nowrap; }
+@media (max-width: 680px) {
+  .report-search-totals { grid-template-columns: 1fr; }
+  .report-search-row { grid-template-columns: 1fr auto; gap: 4px; }
+  .report-search-origin { grid-column: 1 / -1; }
+  .report-search-desc { grid-column: 1; }
+  .report-search-amount { grid-column: 2; }
+  .report-search-date { grid-column: 1 / -1; }
+}
