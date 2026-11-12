@@ -1,251 +1,90 @@
-import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CalendarDays, CarFront, ListChecks, Wallet } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, CalendarDays, CarFront, Check, ListChecks, Plus, Wallet } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { money } from '@/lib/format';
 
-type LedgerEntry = { id: string; entry_date: string; category: string; detail: string; amount: number };
-type BalanceAccount = { account_code: string; account_name: string; as_of: string; asset: number; liability: number; expense: number; income: number };
+type Month = { id: string; month_start: string; month_label: string; is_closed: boolean };
+type CategoryAmount = { id: string; month_start: string; category: string; amount: number };
+type Metric = { id: string; month_start: string; metric_key: string; amount: number };
+type PendingItem = { id: string; month_start: string; account_code: string | null; title: string; detail: string; amount: number; status: 'pending' | 'completed' };
 
-const CATEGORY_LABELS: Record<string, string> = {
-  vehiculos: 'Vehículos',
-  activo_fijo: 'Oficina y equipos',
-  honorarios: 'Honorarios',
-  comisiones: 'Comisiones',
-  arriendos: 'Arriendos y estacionamiento',
-  garantias: 'Garantías de arriendo',
-  tramites: 'Trámites y notaría',
-  fondos_rendir: 'Fondos por rendir',
-  proveedores: 'Proveedores',
-  operacion: 'Operación',
-  traspasos: 'Traspasos',
-  depositos: 'Depósitos',
-  capital: 'Capital (acciones)',
-};
-
-const NEXT_STEPS = [
-  { code: '1108001', title: 'Vender el stock', detail: 'Los autos parados inmovilizan capital cada mes.' },
-  { code: '2106009', title: 'Ordenar la cuenta con el socio', detail: 'Definir cómo se devuelve o se convierte en capital.' },
-  { code: '2110005', title: 'Confirmar comisiones pendientes', detail: 'Provisiones registradas que aún no se pagan.' },
-  { code: '2106001', title: 'Pagar proveedores', detail: 'Facturas por pagar a proveedores.' },
-  { code: '2106003', title: 'Pagar honorarios pendientes', detail: 'Honorarios devengados y no pagados.' },
-  { code: '2111040', title: 'Pagar impuestos', detail: 'Cumplir antes del vencimiento.' },
-  { code: '1106004', title: 'Rendir anticipos a proveedores', detail: 'Cerrar cada anticipo con factura o recuperarlo.' },
-  { code: '1106005', title: 'Rendir anticipos de honorarios', detail: 'Descontar contra los honorarios del mes.' },
-  { code: '1101002', title: 'Rendir fondos entregados', detail: 'Presentar comprobantes de los fondos por rendir.' },
-  { code: '1104003', title: 'Recuperar garantías', detail: 'Se recuperan al término de los contratos de bodega.' },
-  { code: '1109030', title: 'Usar el remanente de IVA', detail: 'Se aplica contra el IVA a pagar de los próximos meses.' },
-];
-
-const monthKey = (iso: string) => iso.slice(0, 7);
-
-function formatDate(iso: string) {
-  const [year, month, day] = iso.split('-').map(Number);
-  return new Date(year, month - 1, day).toLocaleDateString('es-CL', { day: 'numeric', month: 'long', year: 'numeric' });
-}
-
-function formatMonth(key: string) {
-  const [year, month] = key.split('-').map(Number);
-  return new Date(year, month - 1, 1).toLocaleDateString('es-CL', { month: 'long', year: 'numeric' });
-}
+const CATEGORY_LABELS: Record<string, string> = { vehiculos: 'Vehículos', activo_fijo: 'Oficina y equipos', honorarios: 'Honorarios', comisiones: 'Comisiones', arriendos: 'Arriendos y estacionamiento', garantias: 'Garantías', tramites: 'Trámites y notaría', fondos_rendir: 'Fondos por rendir', proveedores: 'Proveedores', operacion: 'Operación', traspasos: 'Traspasos', depositos: 'Depósitos', capital: 'Capital (acciones)' };
+const METRIC_LABELS: Record<string, [string, string]> = { stock_value: ['Vehículos en stock', 'Valor de compra de los autos'], partner_debt: ['Deuda con el socio', 'Cuenta corriente pendiente'], total_expense: ['Gastos acumulados', 'Según el balance al cierre'], total_income: ['Ventas registradas', 'Hasta el cierre cargado'] };
+const monthLabel = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString('es-CL', { month: 'long', year: 'numeric' });
+const asNumber = (value: string) => Number(value.replace(/\./g, '').replace(',', '.')) || 0;
+const nextMonth = (value: string) => { const date = new Date(`${value}T12:00:00`); date.setMonth(date.getMonth() + 1); return date.toISOString().slice(0, 10); };
 
 export function BalanceResumen() {
-  const [accounts, setAccounts] = useState<BalanceAccount[]>([]);
-  const [entries, setEntries] = useState<LedgerEntry[]>([]);
+  const [months, setMonths] = useState<Month[]>([]);
+  const [categories, setCategories] = useState<CategoryAmount[]>([]);
+  const [metrics, setMetrics] = useState<Metric[]>([]);
+  const [pending, setPending] = useState<PendingItem[]>([]);
+  const [selectedMonth, setSelectedMonth] = useState('2026-09-01');
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
 
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      const [accountsResult, entriesResult] = await Promise.all([
-        supabase.from('carwin_balance_accounts').select('account_code, account_name, as_of, asset, liability, expense, income'),
-        supabase.from('carwin_ledger_entries').select('id, entry_date, category, detail, amount').order('entry_date', { ascending: true }),
-      ]);
-      if (!active) return;
-      if (accountsResult.error || entriesResult.error) {
-        setStatus('error');
-        return;
-      }
-      setAccounts((accountsResult.data ?? []).map((row) => ({ ...row, asset: Number(row.asset), liability: Number(row.liability), expense: Number(row.expense), income: Number(row.income) })));
-      setEntries((entriesResult.data ?? []).map((row) => ({ ...row, amount: Number(row.amount) })));
-      setStatus('ready');
-    })();
-    return () => {
-      active = false;
-    };
-  }, []);
+  const load = useCallback(async () => {
+    const [monthResult, categoryResult, metricResult, pendingResult] = await Promise.all([
+      supabase.from('carwin_balance_months').select('id, month_start, month_label, is_closed').order('month_start'),
+      supabase.from('carwin_balance_category_amounts').select('id, month_start, category, amount').order('month_start'),
+      supabase.from('carwin_balance_metrics').select('id, month_start, metric_key, amount').order('month_start'),
+      supabase.from('carwin_balance_pending_items').select('id, month_start, account_code, title, detail, amount, status').order('updated_at', { ascending: false }),
+    ]);
+    if (monthResult.error || categoryResult.error || metricResult.error || pendingResult.error) { setStatus('error'); return; }
+    const loadedMonths = (monthResult.data ?? []) as Month[];
+    setMonths(loadedMonths);
+    setCategories((categoryResult.data ?? []).map((row) => ({ ...row, amount: Number(row.amount) })) as CategoryAmount[]);
+    setMetrics((metricResult.data ?? []).map((row) => ({ ...row, amount: Number(row.amount) })) as Metric[]);
+    setPending((pendingResult.data ?? []).map((row) => ({ ...row, amount: Number(row.amount) })) as PendingItem[]);
+    if (loadedMonths.length && !loadedMonths.some((month) => month.month_start === selectedMonth)) setSelectedMonth(loadedMonths[loadedMonths.length - 1].month_start);
+    setStatus('ready');
+  }, [selectedMonth]);
 
-  const summary = useMemo(() => {
-    if (accounts.length === 0) return null;
-    const asOf = accounts.reduce((latest, row) => (row.as_of > latest ? row.as_of : latest), accounts[0].as_of);
-    const latest = accounts.filter((row) => row.as_of === asOf);
-    const byCode = new Map(latest.map((row) => [row.account_code, row]));
-    const totalExpense = latest.reduce((sum, row) => sum + row.expense, 0);
-    const totalIncome = latest.reduce((sum, row) => sum + row.income, 0);
-    const steps = NEXT_STEPS.flatMap((step) => {
-      const row = byCode.get(step.code);
-      const value = row ? row.asset + row.liability : 0;
-      return value > 0 ? [{ ...step, value }] : [];
-    });
-    return {
-      asOf,
-      stockValue: byCode.get('1108001')?.asset ?? 0,
-      partnerDebt: byCode.get('2106009')?.liability ?? 0,
-      totalExpense,
-      totalIncome,
-      steps,
-    };
-  }, [accounts]);
+  useEffect(() => { void load(); }, [load]);
 
-  const monthly = useMemo(() => {
-    const months = [...new Set(entries.map((entry) => monthKey(entry.entry_date)))].sort();
-    const categories = Object.keys(CATEGORY_LABELS).filter((key) => entries.some((entry) => entry.category === key));
-    const cells = new Map<string, number>();
-    const monthTotals = new Map<string, { total: number; count: number; first: string }>();
-    entries.forEach((entry) => {
-      const key = monthKey(entry.entry_date);
-      cells.set(`${entry.category}|${key}`, (cells.get(`${entry.category}|${key}`) ?? 0) + entry.amount);
-      const current = monthTotals.get(key) ?? { total: 0, count: 0, first: entry.entry_date };
-      monthTotals.set(key, { total: current.total + entry.amount, count: current.count + 1, first: current.first });
-    });
-    return { months, categories, cells, monthTotals };
-  }, [entries]);
+  const currentMetrics = useMemo(() => metrics.filter((item) => item.month_start === selectedMonth), [metrics, selectedMonth]);
+  const currentCategories = useMemo(() => categories.filter((item) => item.month_start === selectedMonth), [categories, selectedMonth]);
+  const currentPending = useMemo(() => pending.filter((item) => item.month_start === selectedMonth), [pending, selectedMonth]);
+  const metricValue = (key: string) => currentMetrics.find((item) => item.metric_key === key)?.amount ?? 0;
+  const saveMetric = async (key: string, value: number) => {
+    const existing = currentMetrics.find((item) => item.metric_key === key);
+    const result = existing
+      ? await supabase.from('carwin_balance_metrics').update({ amount: value, updated_at: new Date().toISOString() }).eq('id', existing.id).select().maybeSingle()
+      : await supabase.from('carwin_balance_metrics').insert({ month_start: selectedMonth, metric_key: key, amount: value }).select().maybeSingle();
+    if (result.error || !result.data) return;
+    const saved = { ...result.data, amount: Number(result.data.amount) } as Metric;
+    setMetrics((items) => existing ? items.map((item) => item.id === existing.id ? saved : item) : [...items, saved]);
+  };
 
-  if (status === 'loading') return <section className="monthly-analysis"><p className="muted">Cargando balance...</p></section>;
-  if (status === 'error' || !summary) {
-    return (
-      <section className="monthly-analysis">
-        <div className="alert-strip has-alerts">
-          <div className="alert-title">
-            <div className="alert-icon"><AlertTriangle size={20} /></div>
-            <div><strong>No pudimos cargar el balance</strong><p>Recarga la página para intentarlo de nuevo.</p></div>
-          </div>
-        </div>
-      </section>
-    );
-  }
+  const addMonth = async () => {
+    const start = nextMonth(months[months.length - 1]?.month_start ?? selectedMonth);
+    const result = await supabase.from('carwin_balance_months').insert({ month_start: start, month_label: monthLabel(start) }).select().maybeSingle();
+    if (result.error || !result.data) return;
+    setMonths((items) => [...items, result.data as Month]);
+    setSelectedMonth(start);
+  };
 
-  const firstDate = entries[0]?.entry_date ?? summary.asOf;
+  const updatePending = async (item: PendingItem, patch: Partial<PendingItem>) => {
+    const result = await supabase.from('carwin_balance_pending_items').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', item.id).select().maybeSingle();
+    if (result.error || !result.data) return;
+    setPending((items) => items.map((entry) => entry.id === item.id ? { ...result.data, amount: Number(result.data.amount) } as PendingItem : entry));
+  };
 
-  return (
-    <section id="balance-resumen" className="monthly-analysis">
-      <div className="section-heading">
-        <div>
-          <p className="eyebrow">BALANCE CONTABLE</p>
-          <h3>Balance desde el inicio a la fecha</h3>
-          <p className="muted">Movimientos desde el {formatDate(firstDate)} hasta el {formatDate(summary.asOf)}.</p>
-        </div>
-        <Wallet size={26} />
-      </div>
+  if (status === 'loading') return <section className="monthly-analysis"><p className="muted">Cargando balance editable...</p></section>;
+  if (status === 'error') return <section className="monthly-analysis"><div className="alert-strip has-alerts"><AlertTriangle size={20} /><div><strong>No pudimos cargar el balance</strong><p>Recarga la página para intentarlo de nuevo.</p></div></div></section>;
 
-      <div className="analysis-grid">
-        <div className="analysis-stat">
-          <span>Vehículos en stock</span>
-          <strong>{money(summary.stockValue)}</strong>
-          <small>Valor de compra de los autos</small>
-        </div>
-        <div className="analysis-stat negative">
-          <span>Deuda con el socio</span>
-          <strong>{money(summary.partnerDebt)}</strong>
-          <small>Cuenta corriente pendiente</small>
-        </div>
-        <div className="analysis-stat">
-          <span>Gastos acumulados</span>
-          <strong>{money(summary.totalExpense)}</strong>
-          <small>Según el balance al cierre</small>
-        </div>
-        <div className="analysis-stat">
-          <span>Ventas registradas</span>
-          <strong>{money(summary.totalIncome)}</strong>
-          <small>Hasta el cierre cargado</small>
-        </div>
-      </div>
-
-      <section className="summary-card timeline-card">
-        <div className="section-heading compact">
-          <div>
-            <p className="eyebrow">CRONOLOGÍA</p>
-            <h3>Cómo empezamos y cómo vamos</h3>
-          </div>
-          <CalendarDays size={22} />
-        </div>
-        <div className="timeline-track">
-          <div className="timeline-node complete"><span>Inicio</span><strong>Julio 2026</strong><small>Capital inicial y primeros gastos</small></div>
-          <div className="timeline-node complete"><span>Construcción</span><strong>Agosto 2026</strong><small>Compras, vehículos y operación</small></div>
-          <div className="timeline-node current"><span>Situación actual</span><strong>Septiembre 2026</strong><small>Balance contable cargado</small></div>
-          <div className="timeline-node pending"><span>Siguiente corte</span><strong>Octubre 2026</strong><small>Falta incorporar el balance</small></div>
-        </div>
-        <div className="monthly-lines">
-        {monthly.months.map((key, index) => {
-          const totals = monthly.monthTotals.get(key);
-          return (
-            <div className="summary-line" key={key}>
-              <span>
-                {index === 0 ? 'Inicio · ' : ''}{formatMonth(key)} · {totals?.count ?? 0} movimientos
-              </span>
-              <strong>{money(totals?.total ?? 0)}</strong>
-            </div>
-          );
-        })}
-        </div>
-        <p className="muted">Octubre de 2026 aún no está cargado en el balance.</p>
-      </section>
-
-      <section className="summary-card">
-        <div className="section-heading compact">
-          <div>
-            <p className="eyebrow">DETALLE POR MES</p>
-            <h3>Gastos y compras por categoría</h3>
-          </div>
-          <CarFront size={22} />
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[420px] text-left text-sm">
-            <thead>
-              <tr className="border-b border-white/10 text-xs uppercase tracking-wide text-slate-400">
-                <th className="py-2 pr-3 font-semibold">Categoría</th>
-                {monthly.months.map((key) => (
-                  <th key={key} className="py-2 pr-3 text-right font-semibold capitalize">{formatMonth(key)}</th>
-                ))}
-                <th className="py-2 text-right font-semibold">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {monthly.categories.map((category) => {
-                const rowTotal = monthly.months.reduce((sum, key) => sum + (monthly.cells.get(`${category}|${key}`) ?? 0), 0);
-                return (
-                  <tr key={category} className="border-b border-white/5">
-                    <td className="py-2 pr-3">{CATEGORY_LABELS[category]}</td>
-                    {monthly.months.map((key) => (
-                      <td key={key} className="py-2 pr-3 text-right tabular-nums">{money(monthly.cells.get(`${category}|${key}`) ?? 0)}</td>
-                    ))}
-                    <td className="py-2 text-right font-semibold tabular-nums">{money(rowTotal)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        <p className="muted">Los montos negativos reducen la deuda con el socio.</p>
-      </section>
-
-      <section className="summary-card">
-        <div className="section-heading compact">
-          <div>
-            <p className="eyebrow">QUÉ DEBEMOS HACER</p>
-            <h3>Pendientes al cierre</h3>
-          </div>
-          <ListChecks size={22} />
-        </div>
-        {summary.steps.map((step) => (
-          <div className="summary-line" key={step.code}>
-            <span>
-              <strong>{step.title}</strong>
-              <small className="block muted">{step.detail}</small>
-            </span>
-            <strong>{money(step.value)}</strong>
-          </div>
-        ))}
-      </section>
-    </section>
-  );
+  return <section id="balance-resumen" className="monthly-analysis">
+    <div className="section-heading">
+      <div><p className="eyebrow">BALANCE CONTABLE</p><h3>Balance editable desde julio 2026</h3><p className="muted">Selecciona un mes y modifica cualquier monto directamente.</p></div>
+      <Wallet size={26} />
+    </div>
+    <div className="balance-toolbar"><label>Mes visible<select value={selectedMonth} onChange={(event) => setSelectedMonth(event.target.value)}>{months.map((month) => <option key={month.month_start} value={month.month_start}>{month.month_label}</option>)}</select></label><button className="primary-button" onClick={() => void addMonth()}><Plus size={18} /> Agregar mes al balance</button></div>
+    <div className="analysis-grid">{Object.entries(METRIC_LABELS).map(([key, [label, detail]]) => <EditableMetric key={key} label={label} detail={detail} value={metricValue(key)} negative={key === 'partner_debt'} onSave={(value) => void saveMetric(key, value)} />)}</div>
+    <section className="summary-card timeline-card"><div className="section-heading compact"><div><p className="eyebrow">CRONOLOGÍA</p><h3>Cómo empezamos y cómo vamos</h3></div><CalendarDays size={22} /></div><div className="timeline-track">{months.map((month, index) => <button className={`timeline-node ${month.month_start === selectedMonth ? 'current' : index < months.findIndex((item) => item.month_start === selectedMonth) ? 'complete' : 'pending'}`} key={month.month_start} onClick={() => setSelectedMonth(month.month_start)}><span>{index === 0 ? 'Inicio' : month.month_start === selectedMonth ? 'Mes visible' : 'Corte'}</span><strong>{month.month_label}</strong><small>{categories.filter((item) => item.month_start === month.month_start).length} categorías cargadas</small></button>)}</div></section>
+    <section className="summary-card"><div className="section-heading compact"><div><p className="eyebrow">DETALLE EDITABLE</p><h3>Gastos y compras por categoría</h3></div><CarFront size={22} /></div><div className="overflow-x-auto"><table className="balance-edit-table"><thead><tr><th>Categoría</th>{months.map((month) => <th key={month.month_start}>{month.month_label}</th>)}</tr></thead><tbody>{Object.entries(CATEGORY_LABELS).map(([category, label]) => <tr key={category}><td>{label}</td>{months.map((month) => <td key={month.month_start}><EditableCell value={categories.find((item) => item.month_start === month.month_start && item.category === category)?.amount ?? 0} onSave={(value) => { setSelectedMonth(month.month_start); void saveCategoryForMonth(month.month_start, category, value, categories, setCategories); }} /></td>)}</tr>)}</tbody></table></div><p className="muted">Haz clic en cualquier monto para editarlo.</p></section>
+    <section className="summary-card"><div className="section-heading compact"><div><p className="eyebrow">QUÉ DEBEMOS HACER</p><h3>Pendientes al cierre</h3></div><ListChecks size={22} /></div>{currentPending.map((item) => <div className={`summary-line pending-line ${item.status === 'completed' ? 'completed' : ''}`} key={item.id}><span><button className="check-button" onClick={() => void updatePending(item, { status: item.status === 'completed' ? 'pending' : 'completed' })}>{item.status === 'completed' ? <Check size={15} /> : null}</button><input value={item.title} onChange={(event) => setPending((items) => items.map((entry) => entry.id === item.id ? { ...entry, title: event.target.value } : entry))} onBlur={(event) => void updatePending(item, { title: event.target.value })} /><small className="block muted">{item.detail}</small></span><EditableCell value={item.amount} onSave={(value) => void updatePending(item, { amount: value })} /></div>)}</section>
+  </section>;
 }
+
+function EditableMetric({ label, detail, value, negative, onSave }: { label: string; detail: string; value: number; negative: boolean; onSave: (value: number) => void }) { return <div className={`analysis-stat ${negative ? 'negative' : ''}`}><span>{label}</span><EditableCell value={value} onSave={onSave} /><small>{detail}</small></div>; }
+function EditableCell({ value, onSave }: { value: number; onSave: (value: number) => void }) { const [editing, setEditing] = useState(false); const [draft, setDraft] = useState(String(value)); if (editing) return <input className="balance-input" autoFocus value={draft} onChange={(event) => setDraft(event.target.value)} onBlur={() => { setEditing(false); onSave(asNumber(draft)); }} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }} />; return <button className="editable-number" onClick={() => { setDraft(String(value)); setEditing(true); }}>{money(value)}</button>; }
+async function saveCategoryForMonth(month: string, category: string, value: number, items: CategoryAmount[], setItems: (items: CategoryAmount[]) => void) { const existing = items.find((item) => item.month_start === month && item.category === category); const result = existing ? await supabase.from('carwin_balance_category_amounts').update({ amount: value, updated_at: new Date().toISOString() }).eq('id', existing.id).select().maybeSingle() : await supabase.from('carwin_balance_category_amounts').insert({ month_start: month, category, amount: value }).select().maybeSingle(); if (result.error || !result.data) return; const saved = { ...result.data, amount: Number(result.data.amount) } as CategoryAmount; setItems(existing ? items.map((item) => item.id === existing.id ? saved : item) : [...items, saved]); }
