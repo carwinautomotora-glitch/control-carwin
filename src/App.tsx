@@ -215,6 +215,38 @@ function App() {
 
   useEffect(() => { void loadData(); }, []);
 
+  useEffect(() => {
+    const channel = supabase
+      .channel('carwin-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'carwin_vehicles' }, (payload) => {
+        if (payload.eventType === 'INSERT') setVehicles((items) => [...items, payload.new as Vehicle]);
+        else if (payload.eventType === 'UPDATE') setVehicles((items) => items.map((item) => item.id === (payload.new as Vehicle).id ? payload.new as Vehicle : item));
+        else if (payload.eventType === 'DELETE') setVehicles((items) => items.filter((item) => item.id !== (payload.old as Vehicle).id));
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'carwin_vehicle_expenses' }, (payload) => {
+        if (payload.eventType === 'INSERT') setVehicleExpenses((items) => [...items, payload.new as VehicleExpense]);
+        else if (payload.eventType === 'UPDATE') setVehicleExpenses((items) => items.map((item) => item.id === (payload.new as VehicleExpense).id ? payload.new as VehicleExpense : item));
+        else if (payload.eventType === 'DELETE') setVehicleExpenses((items) => items.filter((item) => item.id !== (payload.old as VehicleExpense).id));
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'carwin_office_expenses' }, (payload) => {
+        if (payload.eventType === 'INSERT') setOfficeExpenses((items) => [payload.new as OfficeExpense, ...items]);
+        else if (payload.eventType === 'UPDATE') setOfficeExpenses((items) => items.map((item) => item.id === (payload.new as OfficeExpense).id ? payload.new as OfficeExpense : item));
+        else if (payload.eventType === 'DELETE') setOfficeExpenses((items) => items.filter((item) => item.id !== (payload.old as OfficeExpense).id));
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'carwin_sales' }, (payload) => {
+        if (payload.eventType === 'INSERT') setSales((items) => [payload.new as Sale, ...items]);
+        else if (payload.eventType === 'UPDATE') setSales((items) => items.map((item) => item.id === (payload.new as Sale).id ? payload.new as Sale : item));
+        else if (payload.eventType === 'DELETE') setSales((items) => items.filter((item) => item.id !== (payload.old as Sale).id));
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'carwin_sale_payments' }, (payload) => {
+        if (payload.eventType === 'INSERT') setSalePayments((items) => [payload.new as SalePayment, ...items]);
+        else if (payload.eventType === 'UPDATE') setSalePayments((items) => items.map((item) => item.id === (payload.new as SalePayment).id ? payload.new as SalePayment : item));
+        else if (payload.eventType === 'DELETE') setSalePayments((items) => items.filter((item) => item.id !== (payload.old as SalePayment).id));
+      })
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, []);
+
   const activeVehicles = vehicles.filter((v) => v.status === 'active');
   const monthSales = sales.filter((s) => s.sold_at.startsWith(monthPrefix) && s.status !== 'cancelled');
   const monthSalesTotal = monthSales.reduce((sum, sale) => {
