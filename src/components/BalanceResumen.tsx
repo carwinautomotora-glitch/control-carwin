@@ -108,6 +108,63 @@ export function BalanceResumen({ isAdmin = true }: { isAdmin?: boolean } = {}) {
   </section>;
 }
 
-function EditableMetric({ label, detail, value, negative, onSave }: { label: string; detail: string; value: number; negative: boolean; onSave: (value: number) => void }) { return <div className={`analysis-stat ${negative ? 'negative' : ''}`}><span>{label}</span><EditableCell value={value} onSave={onSave} /><small>{detail}</small></div>; }
-function EditableCell({ value, onSave }: { value: number; onSave: (value: number) => void }) { const [editing, setEditing] = useState(false); const [draft, setDraft] = useState(String(value)); if (editing) return <input className="balance-input" autoFocus value={draft} onChange={(event) => setDraft(event.target.value)} onBlur={() => { setEditing(false); onSave(asNumber(draft)); }} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }} />; return <button className="editable-number" onClick={() => { setDraft(String(value)); setEditing(true); }}>{money(value)}</button>; }
+function EditableMetric({ label, detail, value, negative, onSave, readOnly = false }: {
+  label: string;
+  detail: string;
+  value: number;
+  negative: boolean;
+  onSave: (value: number) => void;
+  readOnly?: boolean;
+}) {
+  return (
+    <div className={`analysis-stat ${negative ? 'negative' : ''}`}>
+      <span>{label}</span>
+      <EditableCell value={value} onSave={onSave} readOnly={readOnly} />
+      <small>{detail}</small>
+    </div>
+  );
+}
+
+function EditableCell({ value, onSave, readOnly = false }: {
+  value: number;
+  onSave: (value: number) => void;
+  readOnly?: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(String(value));
+
+  if (readOnly) {
+    return <strong>{money(value)}</strong>;
+  }
+
+  if (editing) {
+    return (
+      <input
+        className="balance-input"
+        autoFocus
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={() => {
+          setEditing(false);
+          onSave(asNumber(draft));
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') event.currentTarget.blur();
+        }}
+      />
+    );
+  }
+
+  return (
+    <button
+      className="editable-number"
+      onClick={() => {
+        setDraft(String(value));
+        setEditing(true);
+      }}
+    >
+      {money(value)}
+    </button>
+  );
+}
 async function saveCategoryForMonth(month: string, category: string, value: number, items: CategoryAmount[], setItems: (items: CategoryAmount[]) => void) { const existing = items.find((item) => item.month_start === month && item.category === category); const result = existing ? await supabase.from('carwin_balance_category_amounts').update({ amount: value, updated_at: new Date().toISOString() }).eq('id', existing.id).select().maybeSingle() : await supabase.from('carwin_balance_category_amounts').insert({ month_start: month, category, amount: value }).select().maybeSingle(); if (result.error || !result.data) return; const saved = { ...result.data, amount: Number(result.data.amount) } as CategoryAmount; setItems(existing ? items.map((item) => item.id === existing.id ? saved : item) : [...items, saved]); }
