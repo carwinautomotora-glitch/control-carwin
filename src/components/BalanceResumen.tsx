@@ -77,7 +77,19 @@ export function BalanceResumen({ isAdmin = true }: { isAdmin?: boolean } = {}) {
 
   return <section id="balance-resumen" className="monthly-analysis">
     <div className="section-heading">
-      <div><p className="eyebrow">BALANCE CONTABLE</p><h3>Balance editable desde julio 2026</h3><p className="muted">Selecciona un mes y modifica cualquier monto directamente.</p></div>
+     <div>
+  <p className="eyebrow">BALANCE CONTABLE</p>
+  <h3>
+    {isAdmin
+      ? 'Balance editable desde julio 2026'
+      : 'Balance contable desde julio 2026'}
+  </h3>
+  <p className="muted">
+    {isAdmin
+      ? 'Selecciona un mes y modifica cualquier monto directamente.'
+      : 'Selecciona un mes para consultar el balance.'}
+  </p>
+</div>
       <Wallet size={26} />
     </div>
     <div className="balance-toolbar">
