@@ -343,7 +343,7 @@ function App({ isAdmin = false }: { isAdmin?: boolean }) {
         <NavItem icon={<Calculator size={22} />} label="Calculadoras" active={view === 'calculators'} onClick={() => setView('calculators')} />
         <NavItem icon={<Landmark size={22} />} label="Simulador" active={view === 'simulador'} onClick={() => setView('simulador')} />
         <NavItem icon={<BarChart3 size={22} />} label="Reportes" active={view === 'reports'} onClick={() => setView('reports')} />
-        <NavItem icon={<Settings2 size={22} />} label="Ajustes" active={false} onClick={() => setShowSettings(true)} />
+{isAdmin && <NavItem icon={<Settings2 size={22} />} label="Ajustes" active={false} onClick={() => setShowSettings(true)} />}
       </nav>
 
       {showInfo && <InfoModal onClose={() => setShowInfo(false)} />}
