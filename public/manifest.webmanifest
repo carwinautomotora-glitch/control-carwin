@@ -1,6 +1,6 @@
 {
-  "name": "CARWIN · Control Operativo",
-  "short_name": "CARWIN",
+  "name": "CARWIN Control",
+  "short_name": "Control",
   "description": "Control operativo y financiero de Automotora CARWIN",
   "start_url": "/",
   "display": "standalone",
