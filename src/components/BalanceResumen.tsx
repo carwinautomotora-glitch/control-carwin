@@ -80,7 +80,27 @@ export function BalanceResumen({ isAdmin = true }: { isAdmin?: boolean } = {}) {
       <div><p className="eyebrow">BALANCE CONTABLE</p><h3>Balance editable desde julio 2026</h3><p className="muted">Selecciona un mes y modifica cualquier monto directamente.</p></div>
       <Wallet size={26} />
     </div>
-    <div className="balance-toolbar"><label>Mes visible<select value={selectedMonth} onChange={(event) => setSelectedMonth(event.target.value)}>{months.map((month) => <option key={month.month_start} value={month.month_start}>{month.month_label}</option>)}</select></label><button className="primary-button" onClick={() => void addMonth()}><Plus size={18} /> Agregar mes al balance</button></div>
+    <div className="balance-toolbar">
+  <label>
+    Mes visible
+    <select
+      value={selectedMonth}
+      onChange={(event) => setSelectedMonth(event.target.value)}
+    >
+      {months.map((month) => (
+        <option key={month.month_start} value={month.month_start}>
+          {month.month_label}
+        </option>
+      ))}
+    </select>
+  </label>
+
+  {isAdmin && (
+    <button className="primary-button" onClick={() => void addMonth()}>
+      <Plus size={18} /> Agregar mes al balance
+    </button>
+  )}
+</div>
     <div className="analysis-grid">{Object.entries(METRIC_LABELS).map(([key, [label, detail]]) => <EditableMetric key={key} label={label} detail={detail} value={metricValue(key)} negative={key === 'partner_debt'} onSave={(value) => void saveMetric(key, value)} />)}</div>
     <section className="summary-card timeline-card"><div className="section-heading compact"><div><p className="eyebrow">CRONOLOGÍA</p><h3>Cómo empezamos y cómo vamos</h3></div><CalendarDays size={22} /></div><div className="timeline-track">{months.map((month, index) => <button className={`timeline-node ${month.month_start === selectedMonth ? 'current' : index < months.findIndex((item) => item.month_start === selectedMonth) ? 'complete' : 'pending'}`} key={month.month_start} onClick={() => setSelectedMonth(month.month_start)}><span>{index === 0 ? 'Inicio' : month.month_start === selectedMonth ? 'Mes visible' : 'Corte'}</span><strong>{month.month_label}</strong><small>{categories.filter((item) => item.month_start === month.month_start).length} categorías cargadas</small></button>)}</div></section>
     <section className="summary-card"><div className="section-heading compact"><div><p className="eyebrow">DETALLE EDITABLE</p><h3>Gastos y compras por categoría</h3></div><CarFront size={22} /></div><div className="overflow-x-auto"><table className="balance-edit-table"><thead><tr><th>Categoría</th>{months.map((month) => <th key={month.month_start}>{month.month_label}</th>)}</tr></thead><tbody>{Object.entries(CATEGORY_LABELS).map(([category, label]) => <tr key={category}><td>{label}</td>{months.map((month) => <td key={month.month_start}><EditableCell value={categories.find((item) => item.month_start === month.month_start && item.category === category)?.amount ?? 0} onSave={(value) => { setSelectedMonth(month.month_start); void saveCategoryForMonth(month.month_start, category, value, categories, setCategories); }} /></td>)}</tr>)}</tbody></table></div><p className="muted">Haz clic en cualquier monto para editarlo.</p></section>
