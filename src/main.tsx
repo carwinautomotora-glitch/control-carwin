@@ -76,6 +76,9 @@ function CarwinAccess() {
     return <Login />;
   }
 
+  const isAdmin =
+    session.user.id === '9c806a5f-812c-4a07-bbd5-c0dd1c5909ad';
+
   return (
     <>
       <div style={{
@@ -102,6 +105,8 @@ function CarwinAccess() {
             fontSize: '14px',
             color: '#ffffff'
           }}>
+            {isAdmin ? 'Perfil Administrador' : 'Perfil'}
+            {' · '}
             {session.user.email}
           </div>
         </div>
