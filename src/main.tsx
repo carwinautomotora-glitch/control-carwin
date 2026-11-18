@@ -9,6 +9,7 @@ import './index.css';
 function CarwinAccess() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [closing, setClosing] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -26,6 +27,28 @@ function CarwinAccess() {
       subscription.unsubscribe();
     };
   }, []);
+
+  async function cerrarSesion() {
+    if (!window.confirm('¿Deseas cerrar tu sesión de CARWIN?')) {
+      return;
+    }
+
+    setClosing(true);
+
+    try {
+      const { error } = await supabase.auth.signOut({
+        scope: 'local'
+      });
+
+      if (error) {
+        window.alert('No se pudo cerrar la sesión. Intenta nuevamente.');
+      }
+    } catch {
+      window.alert('Error de conexión.');
+    } finally {
+      setClosing(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -53,7 +76,57 @@ function CarwinAccess() {
     return <Login />;
   }
 
-  return <App />;
+  return (
+    <>
+      <div style={{
+        background: '#091522',
+        borderBottom: '2px solid #DAB052',
+        padding: '10px 20px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: '10px',
+        color: '#ffffff'
+      }}>
+        <div>
+          <div style={{
+            color: '#E8BB55',
+            fontWeight: 'bold',
+            fontSize: '16px'
+          }}>
+            CARWIN CONTROL
+          </div>
+
+          <div style={{
+            fontSize: '14px',
+            color: '#ffffff'
+          }}>
+            {session.user.email}
+          </div>
+        </div>
+
+        <button
+          onClick={cerrarSesion}
+          disabled={closing}
+          style={{
+            background: '#14283e',
+            color: '#E8BB55',
+            border: '1px solid #DAB052',
+            borderRadius: '8px',
+            padding: '10px 16px',
+            fontSize: '15px',
+            fontWeight: 'bold',
+            cursor: closing ? 'wait' : 'pointer'
+          }}
+        >
+          {closing ? 'Cerrando...' : 'Cerrar sesión'}
+        </button>
+      </div>
+
+      <App />
+    </>
+  );
 }
 
 createRoot(document.getElementById('root')!).render(
