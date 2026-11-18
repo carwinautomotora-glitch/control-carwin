@@ -72,7 +72,7 @@ export function BalanceResumen({ isAdmin = true }: { isAdmin?: boolean } = {}) {
     setPending((items) => items.map((entry) => entry.id === item.id ? { ...result.data, amount: Number(result.data.amount) } as PendingItem : entry));
   };
 
- Cargando balance contable...
+if (status === 'loading') return <section className="monthly-analysis"><p className="muted">Cargando balance contable...</p></section>;
   if (status === 'error') return <section className="monthly-analysis"><div className="alert-strip has-alerts"><AlertTriangle size={20} /><div><strong>No pudimos cargar el balance</strong><p>Recarga la página para intentarlo de nuevo.</p></div></div></section>;
 
   return <section id="balance-resumen" className="monthly-analysis">
