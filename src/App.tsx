@@ -399,7 +399,7 @@ function Dashboard({ activeVehicles, selectedMonth, setSelectedMonth, monthUtili
   </>;
 }
 
-function Inventory({ vehicles, sales, vehicleExpenses, search, setSearch, onAdd, onEdit, onDelete, onSell, onEditSale, onRestoreSale, onManageExpenses }: { vehicles: Vehicle[]; sales: Sale[]; vehicleExpenses: VehicleExpense[]; search: string; setSearch: (value: string) => void; onAdd: () => void; onEdit: (v: Vehicle) => void; onDelete: (v: Vehicle) => void; onSell: (v: Vehicle) => void; onEditSale: (v: Vehicle, sale: Sale) => void; onRestoreSale: (v: Vehicle, sale: Sale) => Promise<void>; onManageExpenses: (v: Vehicle) => void }) {
+function Inventory({ isAdmin, vehicles, sales, vehicleExpenses, search, setSearch, onAdd, onEdit, onDelete, onSell, onEditSale, onRestoreSale, onManageExpenses }: { vehicles: Vehicle[]; sales: Sale[]; vehicleExpenses: VehicleExpense[]; search: string; setSearch: (value: string) => void; onAdd: () => void; onEdit: (v: Vehicle) => void; onDelete: (v: Vehicle) => void; onSell: (v: Vehicle) => void; onEditSale: (v: Vehicle, sale: Sale) => void; onRestoreSale: (v: Vehicle, sale: Sale) => Promise<void>; onManageExpenses: (v: Vehicle) => void }) {
   const [stockView, setStockView] = useState<'active' | 'sold'>('active');
   const [contractVehicle, setContractVehicle] = useState<Vehicle | null>(null);
   const active = vehicles.filter((v) => v.status === 'active');
