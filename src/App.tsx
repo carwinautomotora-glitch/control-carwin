@@ -167,7 +167,7 @@ function groupExpenses(expenses: VehicleExpense[]): GroupedExpense[] {
   return Array.from(map.values());
 }
 
-function App() {
+function App({ isAdmin = false }: { isAdmin?: boolean }) {
   const [view, setView] = useState<View>('dashboard');
   const [selectedMonth, setSelectedMonth] = useState(() => { const now = new Date(); return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`; });
   const monthPrefix = selectedMonth;
