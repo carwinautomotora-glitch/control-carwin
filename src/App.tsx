@@ -540,7 +540,7 @@ function VehicleExpenseModal({ isAdmin, vehicle, expenses, dailyStayCost, onClos
       <Field label="Descripción"><input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Ej. Cambio de aceite" /></Field>
       <Field label="Monto CLP (0 si lo defines después)"><input min="0" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" /></Field>
       <div className="form-actions"><button type="submit" className="primary-button" disabled={saving}>{saving ? 'Guardando...' : 'Agregar gasto'}</button></div>
-    </form>
+</form>}
   </Modal>;
 }
 
