@@ -14,7 +14,7 @@ const monthLabel = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateSt
 const asNumber = (value: string) => Number(value.replace(/\./g, '').replace(',', '.')) || 0;
 const nextMonth = (value: string) => { const date = new Date(`${value}T12:00:00`); date.setMonth(date.getMonth() + 1); return date.toISOString().slice(0, 10); };
 
-export function BalanceResumen() {
+export function BalanceResumen({ isAdmin = true }: { isAdmin?: boolean } = {}) {
   const [months, setMonths] = useState<Month[]>([]);
   const [categories, setCategories] = useState<CategoryAmount[]>([]);
   const [metrics, setMetrics] = useState<Metric[]>([]);
