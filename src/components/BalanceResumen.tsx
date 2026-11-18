@@ -114,7 +114,67 @@ export function BalanceResumen({ isAdmin = true }: { isAdmin?: boolean } = {}) {
     />
   ))}
 </div>
-    <section className="summary-card timeline-card"><div className="section-heading compact"><div><p className="eyebrow">CRONOLOGÍA</p><h3>Cómo empezamos y cómo vamos</h3></div><CalendarDays size={22} /></div><div className="timeline-track">{months.map((month, index) => <button className={`timeline-node ${month.month_start === selectedMonth ? 'current' : index < months.findIndex((item) => item.month_start === selectedMonth) ? 'complete' : 'pending'}`} key={month.month_start} onClick={() => setSelectedMonth(month.month_start)}><span>{index === 0 ? 'Inicio' : month.month_start === selectedMonth ? 'Mes visible' : 'Corte'}</span><strong>{month.month_label}</strong><small>{categories.filter((item) => item.month_start === month.month_start).length} categorías cargadas</small></button>)}</div></section>
+   <section className="summary-card">
+  <div className="section-heading compact">
+    <div>
+      <p className="eyebrow">
+        {isAdmin ? 'DETALLE EDITABLE' : 'DETALLE CONTABLE'}
+      </p>
+      <h3>Gastos y compras por categoría</h3>
+    </div>
+    <CarFront size={22} />
+  </div>
+
+  <div className="overflow-x-auto">
+    <table className="balance-edit-table">
+      <thead>
+        <tr>
+          <th>Categoría</th>
+          {months.map((month) => (
+            <th key={month.month_start}>
+              {month.month_label}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {Object.entries(CATEGORY_LABELS).map(([category, label]) => (
+          <tr key={category}>
+            <td>{label}</td>
+            {months.map((month) => (
+              <td key={month.month_start}>
+                <EditableCell
+                  value={categories.find((item) =>
+                    item.month_start === month.month_start &&
+                    item.category === category
+                  )?.amount ?? 0}
+                  readOnly={!isAdmin}
+                  onSave={(value) => {
+                    if (!isAdmin) return;
+                    setSelectedMonth(month.month_start);
+                    void saveCategoryForMonth(
+                      month.month_start,
+                      category,
+                      value,
+                      categories,
+                      setCategories
+                    );
+                  }}
+                />
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+
+  {isAdmin && (
+    <p className="muted">
+      Haz clic en cualquier monto para editarlo.
+    </p>
+  )}
+</section>
     <section className="summary-card"><div className="section-heading compact"><div><p className="eyebrow">DETALLE EDITABLE</p><h3>Gastos y compras por categoría</h3></div><CarFront size={22} /></div><div className="overflow-x-auto"><table className="balance-edit-table"><thead><tr><th>Categoría</th>{months.map((month) => <th key={month.month_start}>{month.month_label}</th>)}</tr></thead><tbody>{Object.entries(CATEGORY_LABELS).map(([category, label]) => <tr key={category}><td>{label}</td>{months.map((month) => <td key={month.month_start}><EditableCell value={categories.find((item) => item.month_start === month.month_start && item.category === category)?.amount ?? 0} onSave={(value) => { setSelectedMonth(month.month_start); void saveCategoryForMonth(month.month_start, category, value, categories, setCategories); }} /></td>)}</tr>)}</tbody></table></div><p className="muted">Haz clic en cualquier monto para editarlo.</p></section>
     <section className="summary-card"><div className="section-heading compact"><div><p className="eyebrow">QUÉ DEBEMOS HACER</p><h3>Pendientes al cierre</h3></div><ListChecks size={22} /></div>{currentPending.map((item) => <div className={`summary-line pending-line ${item.status === 'completed' ? 'completed' : ''}`} key={item.id}><span><button className="check-button" onClick={() => void updatePending(item, { status: item.status === 'completed' ? 'pending' : 'completed' })}>{item.status === 'completed' ? <Check size={15} /> : null}</button><input value={item.title} onChange={(event) => setPending((items) => items.map((entry) => entry.id === item.id ? { ...entry, title: event.target.value } : entry))} onBlur={(event) => void updatePending(item, { title: event.target.value })} /><small className="block muted">{item.detail}</small></span><EditableCell value={item.amount} onSave={(value) => void updatePending(item, { amount: value })} /></div>)}</section>
   </section>;
