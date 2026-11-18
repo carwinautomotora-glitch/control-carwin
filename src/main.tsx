@@ -129,7 +129,7 @@ function CarwinAccess() {
         </button>
       </div>
 
-      <App />
+<App isAdmin={isAdmin} />
     </>
   );
 }
