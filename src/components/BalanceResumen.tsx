@@ -46,6 +46,7 @@ export function BalanceResumen({ isAdmin = true }: { isAdmin?: boolean } = {}) {
   const currentPending = useMemo(() => pending.filter((item) => item.month_start === selectedMonth), [pending, selectedMonth]);
   const metricValue = (key: string) => currentMetrics.find((item) => item.metric_key === key)?.amount ?? 0;
   const saveMetric = async (key: string, value: number) => {
+    if (!isAdmin) return;
     const existing = currentMetrics.find((item) => item.metric_key === key);
     const result = existing
       ? await supabase.from('carwin_balance_metrics').update({ amount: value, updated_at: new Date().toISOString() }).eq('id', existing.id).select().maybeSingle()
@@ -56,6 +57,7 @@ export function BalanceResumen({ isAdmin = true }: { isAdmin?: boolean } = {}) {
   };
 
   const addMonth = async () => {
+    if (!isAdmin) return;
     const start = nextMonth(months[months.length - 1]?.month_start ?? selectedMonth);
     const result = await supabase.from('carwin_balance_months').insert({ month_start: start, month_label: monthLabel(start) }).select().maybeSingle();
     if (result.error || !result.data) return;
@@ -64,6 +66,7 @@ export function BalanceResumen({ isAdmin = true }: { isAdmin?: boolean } = {}) {
   };
 
   const updatePending = async (item: PendingItem, patch: Partial<PendingItem>) => {
+    if (!isAdmin) return;
     const result = await supabase.from('carwin_balance_pending_items').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', item.id).select().maybeSingle();
     if (result.error || !result.data) return;
     setPending((items) => items.map((entry) => entry.id === item.id ? { ...result.data, amount: Number(result.data.amount) } as PendingItem : entry));
