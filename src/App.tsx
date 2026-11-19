@@ -615,7 +615,7 @@ function SaleModal({ vehicle, sale, dailyStayCost, monthPrefix, payments, onAddP
   const [stayDays, setStayDays] = useState(autoStayDays);
   const [stayEdit, setStayEdit] = useState(false);
   const parking = isPhysical(vehicle.vehicle_type) ? dailyStayCost * stayDays : 0;
-  const lines = useMemo(() => [...expenses.map((e) => ({ id: e.id, description: e.description, amount: e.amount, expense_type: e.expense_type, allocation: e.allocation })), ...(parking > 0 ? [{ id: 'parking', description: `Estadía · ${stayDays} días × ${money(dailyStayCost)}`, amount: parking, expense_type: 'parking' as const, allocation: 'carwin' as const }] : [])], [expenses, parking, dailyStayCost, stayDays]);
+  const lines = useMemo(() => [...expenses.filter((e) => !e.is_daily_stay).map((e) =>({ id: e.id, description: e.description, amount: e.amount, expense_type: e.expense_type, allocation: e.allocation })), ...(parking > 0 ? [{ id: 'parking', description: `Estadía · ${stayDays} días × ${money(dailyStayCost)}`, amount: parking, expense_type: 'parking' as const, allocation: 'carwin' as const }] : [])], [expenses, parking, dailyStayCost, stayDays]);
   const initialSelected = sale ? [...sale.charged_expense_ids, ...(sale.parking_charged ? ['parking'] : [])] : lines.map((l) => l.id);
   const [selected, setSelected] = useState<string[]>(initialSelected);
   const [realPrice, setRealPrice] = useState((sale?.real_sale_price ?? vehicle.sale_price).toString());
