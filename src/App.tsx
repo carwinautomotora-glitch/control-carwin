@@ -382,7 +382,7 @@ function expiringDocuments(vehicle: Vehicle) {
   return [vehicle.permit_expiry, vehicle.soap_expiry, vehicle.inspection_expiry].filter((date) => date && Math.ceil((new Date(`${date}T12:00:00`).getTime() - TODAY.getTime()) / 86400000) < 30).length;
 }
 
-function Dashboard({ activeVehicles, selectedMonth, setSelectedMonth, monthUtility, monthSalesTotal, officeTotal, potentialProfit, documentationAlerts, physicalAging, onSeeInventory, onSell, onManageExpenses, vehicleExpenses }: { activeVehicles: Vehicle[]; selectedMonth: string; setSelectedMonth: (value: string) => void; monthUtility: number; monthSalesTotal: number; officeTotal: number; potentialProfit: number; documentationAlerts: number; physicalAging: number; onSeeInventory: () => void; onSell: (v: Vehicle) => void; onManageExpenses: (v: Vehicle) => void; vehicleExpenses: VehicleExpense[] }) {
+function Dashboard({ isAdmin, activeVehicles, selectedMonth, setSelectedMonth, monthUtility, monthSalesTotal, officeTotal, potentialProfit, documentationAlerts, physicalAging, onSeeInventory, onSell, onManageExpenses, vehicleExpenses }: { isAdmin: boolean; activeVehicles: Vehicle[]; selectedMonth: string; setSelectedMonth: (value: string) => void; monthUtility: number; monthSalesTotal: number; officeTotal: number; potentialProfit: number; documentationAlerts: number; physicalAging: number; onSeeInventory: () => void; onSell: (v: Vehicle) => void; onManageExpenses: (v: Vehicle) => void; vehicleExpenses: VehicleExpense[] }) {
   const utilityTone = monthUtility >= 0 ? 'green' : 'red';
   const topVehicles = [...activeVehicles].sort((a, b) => calculateVehicleMargin(b, vehicleExpenses) - calculateVehicleMargin(a, vehicleExpenses)).slice(0, 4);
   return <>
