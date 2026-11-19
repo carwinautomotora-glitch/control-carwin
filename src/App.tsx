@@ -43,6 +43,14 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
 const TODAY = new Date();
+
+const todayChile = () =>
+  new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'America/Santiago',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
 const DEFAULT_DAILY_STAY_COST = 3900;
 const DEFAULT_UF_VALUE = 47890;
 const ADDRESS_TEXT = 'Av. Vitacura 4607 Nivel -3 N°22\nCentro Comercial Paseo el Tamarugo';
