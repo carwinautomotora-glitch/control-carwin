@@ -833,7 +833,25 @@ function SaleNoteModal({ vehicle, sale, payments, buyerData, onClose }: { vehicl
     setPrinting(true); setNoteError('');
     try {
       await document.fonts.ready;
-      const canvas = await html2canvas(noteRef.current, { backgroundColor: '#ffffff', scale: 2, useCORS: true, onclone: (doc) => { const n = doc.querySelector<HTMLElement>('.carwin-note-premium'); if(n) n.style.width = '760px'; } });
+      const logo = noteRef.current.querySelector<HTMLImageElement>('.note-logo');
+      if (!logo) throw new Error('Logo no encontrado');
+      await logo.decode();
+      const logoCanvas = document.createElement('canvas');
+      logoCanvas.width = logo.naturalWidth; logoCanvas.height = logo.naturalHeight;
+      const logoCtx = logoCanvas.getContext('2d');
+      if (!logoCtx) throw new Error('Logo no disponible');
+      logoCtx.drawImage(logo, 0, 0);
+      const logoData = logoCanvas.toDataURL('image/png');
+      const canvas = await html2canvas(noteRef.current, { backgroundColor: '#ffffff', scale: 2, useCORS: true, onclone: async (doc) => {
+        const n = doc.querySelector<HTMLElement>('.carwin-note-premium');
+        if (n) n.style.width = '760px';
+        const img = n?.querySelector<HTMLImageElement>('.note-logo');
+        if (!img) throw new Error('Logo no encontrado en PDF');
+        img.src = logoData; await img.decode();
+        img.style.objectFit = 'fill';
+        img.style.height = `${210 * logo.naturalHeight / logo.naturalWidth}px`;
+        img.style.width = '210px';
+      } });
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' });
       const w = 195, h = canvas.height * w / canvas.width;
       const ratio = Math.min(1, 258 / h);
