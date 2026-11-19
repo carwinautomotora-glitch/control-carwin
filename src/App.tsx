@@ -519,7 +519,7 @@ function VehicleForm({ vehicle, onClose, onSave }: { vehicle: Vehicle | null; on
 }
 
 function OfficeExpenseForm({ onClose, onSave }: { onClose: () => void; onSave: (description: string, amount: number, date: string) => Promise<void> }) {
-  const [description, setDescription] = useState(''); const [amount, setAmount] = useState(''); const [date, setDate] = useState('2026-11-02'); const [saving, setSaving] = useState(false);
+  const [description, setDescription] = useState(''); const [amount, setAmount] = useState(''); const [date, setDate] = useState(todayChile()); const [saving, setSaving] = useState(false);
   const submit = async (event: FormEvent) => { event.preventDefault(); if (!description || !Number(amount)) return; setSaving(true); try { await onSave(description, Number(amount), date); } finally { setSaving(false); } };
   return <Modal title="Registrar gasto de oficina" onClose={onClose}><form className="single-form" onSubmit={submit}><Field label="Descripción" required><input required value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Ej. Publicidad digital" /></Field><Field label="Monto CLP" required><input required min="1" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" /></Field><Field label="Fecha" required><input required type="date" value={date} onChange={(e) => setDate(e.target.value)} /></Field><div className="form-actions"><button type="button" className="secondary-button" onClick={onClose}>Cancelar</button><button type="submit" className="primary-button" disabled={saving}>{saving ? 'Guardando...' : 'Guardar gasto'}</button></div></form></Modal>;
 }
