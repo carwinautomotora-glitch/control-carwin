@@ -376,7 +376,9 @@ function calculateVehicleMargin(vehicle: Vehicle, expenses: VehicleExpense[], da
 }
 
 function daysBetweenDates(start: string, end: string) {
-  return Math.max(1, Math.floor((new Date(`${end}T12:00:00`).getTime() - new Date(`${start}T12:00:00`).getTime()) / 86400000) + 1);
+  const startDate = Date.parse(`${start.slice(0, 10)}T00:00:00Z`);
+  const endDate = Date.parse(`${end.slice(0, 10)}T00:00:00Z`);
+  return Math.max(1, Math.round((endDate - startDate) / 86400000) + 1);
 }
 
 function calculateSaleUtility(vehicle: Vehicle, sale: Sale, expenses: VehicleExpense[], dailyStayCost = DEFAULT_DAILY_STAY_COST) {
