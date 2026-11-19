@@ -566,7 +566,7 @@ function SaleModal({ vehicle, sale, dailyStayCost, monthPrefix, payments, onAddP
   const [agreedPrice, setAgreedPrice] = useState((sale?.agreed_price ?? vehicle.agreed_price).toString());
   const [newExpense, setNewExpense] = useState(''); const [newAmount, setNewAmount] = useState('');
   const [newExpenseType, setNewExpenseType] = useState<ExpenseType>('extra');
-  const [paymentDate, setPaymentDate] = useState('2026-11-08'); const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('bank_transfer'); const [paymentAmount, setPaymentAmount] = useState(''); const [paymentBank, setPaymentBank] = useState(''); const [paymentReference, setPaymentReference] = useState(''); const [paymentVerified, setPaymentVerified] = useState(false);
+  const [paymentDate, setPaymentDate] = useState(todayChile()); const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('bank_transfer'); const [paymentAmount, setPaymentAmount] = useState(''); const [paymentBank, setPaymentBank] = useState(''); const [paymentReference, setPaymentReference] = useState(''); const [paymentVerified, setPaymentVerified] = useState(false);
   const [buyerName, setBuyerName] = useState(sale?.buyer_name ?? ''); const [buyerRut, setBuyerRut] = useState(sale?.buyer_rut ?? ''); const [buyerAddress, setBuyerAddress] = useState(sale?.buyer_address ?? ''); const [buyerPhone, setBuyerPhone] = useState(sale?.buyer_phone ?? ''); const [deliveryDate, setDeliveryDate] = useState(sale?.delivery_date ?? ''); const [terms, setTerms] = useState(sale?.terms ?? ''); const [showSaleNote, setShowSaleNote] = useState(false);
   const [saving, setSaving] = useState(false);
   const charged = lines.filter((l) => selected.includes(l.id)).reduce((sum, l) => sum + l.amount, 0);
