@@ -427,7 +427,7 @@ function OfficeExpenses({ isAdmin, expenses, monthPrefix, onAdd, onDelete }: { i
       ...expenses.map((item) => item.expense_date.slice(0, 4)),
     ])
   ).sort().reverse();
-  const filtered = showAllYear ? expenses : expenses.filter((item) => item.expense_date.startsWith(monthPrefix));
+const filtered = expenses.filter((item) => item.expense_date.startsWith(showAllYear ? selectedYear : selectedPeriod));
   const total = filtered.reduce((sum, item) => sum + item.amount, 0);
   const grouped = filtered.reduce<Record<string, number>>((acc, item) => { acc[item.description] = (acc[item.description] ?? 0) + item.amount; return acc; }, {});
   const monthName = new Intl.DateTimeFormat('es-CL', { month: 'long', year: 'numeric' }).format(new Date(`${monthPrefix}-15T12:00:00`));
