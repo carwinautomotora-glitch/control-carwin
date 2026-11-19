@@ -1051,9 +1051,11 @@ function ConsignmentContractModal({ vehicle, onClose }: { vehicle: Vehicle; onCl
   const [error, setError] = useState('');
   const ref = useRef<HTMLDivElement>(null);
   const kind = vehicle.vehicle_type === 'physical_consignment' ? 'Consignación física' : 'Consignación virtual';
-  const valid = !!(ownerName.trim() && ownerRut.trim() && start && Number(minimumPrice)>0 && Number(publication)>=Number(minimumPrice) && vehicle.vehicle_type !== 'own');
+  const valid = !!(start && Number(minimumPrice)>0 && Number(publication)>0 && vehicle.vehicle_type !== 'own');
+  const draft = !ownerName.trim() || !ownerRut.trim() || Number(publication)<Number(minimumPrice);
   const generate = async (print: boolean) => {
     if (!valid || !ref.current) return;
+    const printWindow = print ? window.open('about:blank', '_blank') : null;
     setBusy(true); setError('');
     try {
       await document.fonts.ready;
@@ -1064,8 +1066,8 @@ function ConsignmentContractModal({ vehicle, onClose }: { vehicle: Vehicle; onCl
       const w=195, h=canvas.height*w/canvas.width, ratio=Math.min(1,258/h);
       pdf.addImage(canvas.toDataURL('image/png'),'PNG',(215.9-w*ratio)/2,10,w*ratio,h*ratio);
       const filename=`contrato-consignacion-${vehicle.plate || vehicle.id}.pdf`;
-      if(print){pdf.autoPrint(); const win=window.open(String(pdf.output('bloburl')),'_blank'); if(!win){pdf.save(filename);setError('Ventana bloqueada: se descargó el PDF para imprimir.');}} else pdf.save(filename);
-    } catch {setError('No se pudo generar el contrato. Intenta nuevamente.');} finally {setBusy(false);}
+      if(print && printWindow && !printWindow.closed){pdf.autoPrint(); printWindow.location.href=String(pdf.output('bloburl'));} else {pdf.save(filename); if(print) setError('Ventana bloqueada: abre el PDF descargado para imprimir.');}
+    } catch {printWindow?.close(); setError('No se pudo generar el contrato. Intenta nuevamente.');} finally {setBusy(false);}
   };
   return <Modal title="Contrato de consignación" onClose={onClose} wide>
     <div className="form-grid contract-form">
@@ -1081,7 +1083,7 @@ function ConsignmentContractModal({ vehicle, onClose }: { vehicle: Vehicle; onCl
     <style>{`.cw-contract-paper{background:white;color:#102b4f;padding:24px;box-sizing:border-box;font-size:14px;line-height:1.4;border-radius:8px;overflow-wrap:anywhere}.cw-contract-paper h3{color:#102b4f;margin:12px 0;font-size:23px}.cw-contract-paper h4{background:#eef3f8;color:#102b4f;border-left:4px solid #c9a34c;padding:6px 9px;margin:12px 0 6px;font-size:14px}.cw-contract-paper p{margin:5px 0;color:#102b4f}.cw-contract-paper .cw-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px 18px}.cw-contract-paper small{display:block;color:#536b83}.cw-contract-paper b{color:#102b4f}.cw-contract-paper .cw-head{display:flex;align-items:center;gap:16px;background:#0a1d35;padding:14px;border-bottom:4px solid #d5ad52;border-radius:5px}.cw-contract-paper .cw-head img{width:210px;height:auto}.cw-contract-paper .cw-head strong{color:white;font-size:21px}.cw-contract-paper .cw-head p{color:#e2c982}.cw-contract-paper .cw-sign{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin:65px 0 15px;text-align:center}.cw-contract-paper .cw-sign div{border-top:2px solid #24364b;padding-top:7px}.cw-contract-paper footer{background:#102b4f;color:#e2c982;text-align:center;padding:8px}`}</style>
     <div ref={ref} className="cw-contract-paper">
       <div className="cw-head"><img src="/assets/images/Logo_Oficial.jpeg" alt="CARWIN"/><div><strong>CARWIN SpA</strong><p>www.carwin.cl · Vitacura, Santiago</p></div></div>
-      <h3>CONTRATO DE CONSIGNACIÓN VEHICULAR</h3><p>Vitacura · {start || 'Fecha por definir'}</p>
+      <h3>CONTRATO DE CONSIGNACIÓN VEHICULAR</h3>{draft && <p style={{fontWeight:700}}>BORRADOR · Pendiente de revisión</p>}<p>Vitacura · {start || 'Fecha por definir'}</p>
       <h4>01 / DATOS DEL CONSIGNANTE</h4><div className="cw-grid"><div><small>Nombre</small><b>{ownerName || 'Por completar'}</b></div><div><small>RUT</small><b>{ownerRut || 'Por completar'}</b></div><div><small>Dirección</small><b>{ownerAddress || 'Por completar'}</b></div><div><small>Teléfono</small><b>{ownerPhone || 'Por completar'}</b></div></div>
       <h4>02 / VEHÍCULO</h4><div className="cw-grid"><div><small>Modelo</small><b>{vehicle.model}</b></div><div><small>Patente</small><b>{vehicle.plate}</b></div><div><small>Kilómetros / color</small><b>{vehicle.kilometers.toLocaleString('es-CL')} · {vehicle.color}</b></div><div><small>Modalidad</small><b>{vehicle.vehicle_type==='own'?'No corresponde':kind}</b></div></div>
       <h4>03 / ACUERDO COMERCIAL</h4><div className="cw-grid"><div><small>Valor acordado para el propietario</small><b>{money(Number(minimumPrice)||0)}</b></div><div><small>Precio de publicación</small><b>{money(Number(publication)||0)}</b></div></div>
@@ -1092,7 +1094,9 @@ function ConsignmentContractModal({ vehicle, onClose }: { vehicle: Vehicle; onCl
       <div className="cw-sign"><div>Firma del consignante</div><div>Firma CARWIN SpA</div></div><footer>Gracias por confiar en CARWIN · www.carwin.cl</footer>
     </div>
     <p className="muted">Los datos editados se aplican al documento; no modifican el stock ni se guardan en la base de datos.</p>
-    {error && <p>{error}</p>}
+    {(!ownerName.trim() || !ownerRut.trim()) && <p style={{color:'#ffdc78'}}>Falta nombre o RUT del consignante. Puedes imprimir un borrador.</p>}
+    {Number(publication)<Number(minimumPrice) && <p style={{color:'#ffdc78'}}>Atención: el precio de publicación es inferior al valor acordado para el propietario. Revisa los valores antes de firmar.</p>}
+    {error && <p role="alert">{error}</p>}
     <div className="form-actions"><button className="secondary-button" onClick={()=>void generate(true)} disabled={!valid||busy}>Imprimir contrato</button><button className="primary-button" onClick={()=>void generate(false)} disabled={!valid||busy}>Descargar contrato PDF</button><button className="secondary-button" onClick={onClose}>Cerrar</button></div>
   </Modal>;
 }
