@@ -631,6 +631,8 @@ const defaultSoldAt = sale?.sold_at ?? todayChile();const defaultSoldAt = sale?.
   const [saving, setSaving] = useState(false);
   const charged = lines.filter((l) => selected.includes(l.id)).reduce((sum, l) => sum + l.amount, 0);
   const finalAmount = Number(agreedPrice || 0) - charged;
+const transferExtra = transferMode === 'separate' ? Number(transferCost || 0) : 0;
+const totalToCollect = Number(realPrice || 0) + transferExtra;
   const assumedExpenseTotal = lines.filter((line) => !selected.includes(line.id)).reduce((sum, line) => sum + line.amount, 0);
   const projectedUtility = Number(realPrice || 0) - vehicle.purchase_price - assumedExpenseTotal;
   const saleIsViable = projectedUtility >= 0;
