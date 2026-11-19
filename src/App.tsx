@@ -155,7 +155,7 @@ const initialVehicle: Omit<Vehicle, 'id' | 'status'> = {
 };
 
 const dateLabel = (value: string | null) => value ? new Intl.DateTimeFormat('es-CL', { day: '2-digit', month: 'short' }).format(new Date(`${value}T12:00:00`)).replace('.', '') : 'Sin fecha';
-const daysBetween = (date: string) => Math.max(1, Math.floor((TODAY.getTime() - new Date(`${date}T12:00:00`).getTime()) / 86400000) + 1);
+const daysBetween = (date: string) => daysBetweenDates(date, todayChile());
 const isPhysical = (type: VehicleType) => type === 'own' || type === 'physical_consignment';
 const typeLabel = (type: VehicleType) => type === 'own' ? 'Propio' : type === 'physical_consignment' ? 'Consignación física' : 'Consignación virtual';
 const paymentMethodLabel = (method: PaymentMethod) => method === 'cash' ? 'Efectivo' : method === 'bank_draft' ? 'Vale vista' : method === 'bank_transfer' ? 'Transferencia' : method === 'card' ? 'Tarjeta' : 'Parte de pago';
