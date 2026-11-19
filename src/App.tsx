@@ -177,6 +177,10 @@ function groupExpenses(expenses: VehicleExpense[]): GroupedExpense[] {
   return Array.from(map.values());
 }
 
+function upsertRow<T extends { id: string }>(items: T[], row: T): T[] {
+  return items.some(item => item.id === row.id) ? items.map(item => item.id === row.id ? row : item) : [row, ...items];
+}
+
 function App({ isAdmin = false }: { isAdmin?: boolean }) {
   const [view, setView] = useState<View>('dashboard');
   const [selectedMonth, setSelectedMonth] = useState(() => { const now = new Date(); return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`; });
@@ -229,27 +233,27 @@ function App({ isAdmin = false }: { isAdmin?: boolean }) {
     const channel = supabase
       .channel('carwin-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'carwin_vehicles' }, (payload) => {
-        if (payload.eventType === 'INSERT') setVehicles((items) => [...items, payload.new as Vehicle]);
+        if (payload.eventType === 'INSERT') setVehicles((items) => upsertRow(items, payload.new as Vehicle));
         else if (payload.eventType === 'UPDATE') setVehicles((items) => items.map((item) => item.id === (payload.new as Vehicle).id ? payload.new as Vehicle : item));
         else if (payload.eventType === 'DELETE') setVehicles((items) => items.filter((item) => item.id !== (payload.old as Vehicle).id));
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'carwin_vehicle_expenses' }, (payload) => {
-        if (payload.eventType === 'INSERT') setVehicleExpenses((items) => [...items, payload.new as VehicleExpense]);
+        if (payload.eventType === 'INSERT') setVehicleExpenses((items) => upsertRow(items, payload.new as VehicleExpense));
         else if (payload.eventType === 'UPDATE') setVehicleExpenses((items) => items.map((item) => item.id === (payload.new as VehicleExpense).id ? payload.new as VehicleExpense : item));
         else if (payload.eventType === 'DELETE') setVehicleExpenses((items) => items.filter((item) => item.id !== (payload.old as VehicleExpense).id));
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'carwin_office_expenses' }, (payload) => {
-        if (payload.eventType === 'INSERT') setOfficeExpenses((items) => [payload.new as OfficeExpense, ...items]);
+        if (payload.eventType === 'INSERT') setOfficeExpenses((items) => upsertRow(items, payload.new as OfficeExpense));
         else if (payload.eventType === 'UPDATE') setOfficeExpenses((items) => items.map((item) => item.id === (payload.new as OfficeExpense).id ? payload.new as OfficeExpense : item));
         else if (payload.eventType === 'DELETE') setOfficeExpenses((items) => items.filter((item) => item.id !== (payload.old as OfficeExpense).id));
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'carwin_sales' }, (payload) => {
-        if (payload.eventType === 'INSERT') setSales((items) => [payload.new as Sale, ...items]);
+        if (payload.eventType === 'INSERT') setSales((items) => upsertRow(items, payload.new as Sale));
         else if (payload.eventType === 'UPDATE') setSales((items) => items.map((item) => item.id === (payload.new as Sale).id ? payload.new as Sale : item));
         else if (payload.eventType === 'DELETE') setSales((items) => items.filter((item) => item.id !== (payload.old as Sale).id));
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'carwin_sale_payments' }, (payload) => {
-        if (payload.eventType === 'INSERT') setSalePayments((items) => [payload.new as SalePayment, ...items]);
+        if (payload.eventType === 'INSERT') setSalePayments((items) => upsertRow(items, payload.new as SalePayment));
         else if (payload.eventType === 'UPDATE') setSalePayments((items) => items.map((item) => item.id === (payload.new as SalePayment).id ? payload.new as SalePayment : item));
         else if (payload.eventType === 'DELETE') setSalePayments((items) => items.filter((item) => item.id !== (payload.old as SalePayment).id));
       })
@@ -271,18 +275,20 @@ function App({ isAdmin = false }: { isAdmin?: boolean }) {
   const documentationAlerts = activeVehicles.reduce((total, v) => total + expiringDocuments(v), 0);
 
   const saveVehicle = async (data: Omit<Vehicle, 'id' | 'status'>, id?: string) => {
+    if (!isAdmin) throw new Error("Acceso de solo lectura");
     const payload = { ...data, plate: data.plate.toUpperCase() };
     const result = id
       ? await supabase.from('carwin_vehicles').update(payload).eq('id', id).select().maybeSingle()
       : await supabase.from('carwin_vehicles').insert(payload).select().maybeSingle();
     if (result.error || !result.data) throw result.error ?? new Error('No se pudo guardar');
     if (id) setVehicles((items) => items.map((item) => item.id === id ? result.data as Vehicle : item));
-    else setVehicles((items) => [...items, result.data as Vehicle]);
+    else setVehicles((items) => upsertRow(items, result.data as Vehicle));
     setShowVehicleForm(false);
     setEditingVehicle(null);
   };
 
   const removeVehicle = async (vehicle: Vehicle) => {
+    if (!isAdmin) throw new Error("Acceso de solo lectura");
     if (!window.confirm(`¿Retirar ${vehicle.model} del stock?`)) return;
     const result = await supabase.from('carwin_vehicles').update({ status: 'removed' }).eq('id', vehicle.id);
     if (result.error) setError('No se pudo retirar el vehículo.');
@@ -290,39 +296,46 @@ function App({ isAdmin = false }: { isAdmin?: boolean }) {
   };
 
   const addOfficeExpense = async (description: string, amount: number, date: string) => {
+    if (!isAdmin) throw new Error("Acceso de solo lectura");
     const result = await supabase.from('carwin_office_expenses').insert({ description, amount, expense_date: date }).select().maybeSingle();
     if (result.error || !result.data) throw result.error ?? new Error('No se pudo guardar');
-    setOfficeExpenses((items) => [result.data as OfficeExpense, ...items]);
+    setOfficeExpenses((items) => upsertRow(items, result.data as OfficeExpense));
     setShowOfficeForm(false);
   };
 
   const addVehicleExpense = async (vehicleId: string, description: string, amount: number, expenseType: ExpenseType, allocation: ExpenseAllocation = 'carwin') => {
+    if (!isAdmin) throw new Error("Acceso de solo lectura");
     const result = await supabase.from('carwin_vehicle_expenses').insert({ vehicle_id: vehicleId, expense_type: expenseType, description, amount, allocation, expense_date: todayChile()}).select().maybeSingle();
     if (result.error || !result.data) throw result.error ?? new Error('No se pudo guardar');
-    setVehicleExpenses((items) => [...items, result.data as VehicleExpense]);
+    setVehicleExpenses((items) => upsertRow(items, result.data as VehicleExpense));
   };
 
   const deleteVehicleExpense = async (id: string) => {
+    if (!isAdmin) throw new Error("Acceso de solo lectura");
     const result = await supabase.from('carwin_vehicle_expenses').delete().eq('id', id);
     if (result.error) { setError('No se pudo eliminar el gasto.'); return; }
     setVehicleExpenses((items) => items.filter((item) => item.id !== id));
   };
 
   const updateVehicleExpense = async (id: string, description: string, amount: number, allocation: ExpenseAllocation) => {
+    if (!isAdmin) throw new Error("Acceso de solo lectura");
     const result = await supabase.from('carwin_vehicle_expenses').update({ description, amount, allocation }).eq('id', id).select().maybeSingle();
     if (result.error || !result.data) { setError('No se pudo actualizar el gasto.'); return; }
     setVehicleExpenses((items) => items.map((item) => item.id === id ? result.data as VehicleExpense : item));
   };
 
   const addSalePayment = async (saleId: string, payment: Omit<SalePayment, 'id' | 'sale_id'>) => {
+    if (!isAdmin) throw new Error("Acceso de solo lectura");
     const result = await supabase.from('carwin_sale_payments').insert({ sale_id: saleId, ...payment }).select().maybeSingle();
     if (result.error || !result.data) throw result.error ?? new Error('No se pudo registrar el pago');
-    setSalePayments((items) => [result.data as SalePayment, ...items]);
+    setSalePayments((items) => upsertRow(items, result.data as SalePayment));
   };
 
   const deleteSalePayment = async (id: string) => {
-    const result = await supabase.from('carwin_sale_payments').delete().eq('id', id);
-    if (result.error) { setError('No se pudo eliminar el pago.'); return; }
+    if (!isAdmin) throw new Error("Acceso de solo lectura");
+    if (!window.confirm('¿Eliminar este pago?')) return;
+    const result = await supabase.from('carwin_sale_payments').delete().eq('id', id).select('id').maybeSingle();
+    if (result.error || !result.data) { setError('No se pudo eliminar el pago.'); return; }
     setSalePayments((items) => items.filter((item) => item.id !== id));
   };
 
@@ -341,7 +354,7 @@ function App({ isAdmin = false }: { isAdmin?: boolean }) {
 {view === 'dashboard' && <><Dashboard isAdmin={isAdmin} activeVehicles={activeVehicles} selectedMonth={selectedMonth} setSelectedMonth={setSelectedMonth} monthUtility={monthUtility} monthSalesTotal={monthSalesTotal} officeTotal={officeTotal} potentialProfit={potentialProfit} documentationAlerts={documentationAlerts} physicalAging={physicalAging} onSeeInventory={() => setView('inventory')} onSell={setSellingVehicle} onManageExpenses={setExpenseVehicle} vehicleExpenses={vehicleExpenses} /><BalanceResumen isAdmin={isAdmin} /></>}
         {view === 'reports' && <Reports vehicles={vehicles} sales={sales} vehicleExpenses={vehicleExpenses} salePayments={salePayments} officeExpenses={officeExpenses} monthPrefix={monthPrefix} />}
         {view === 'inventory' && <Inventory isAdmin={isAdmin} vehicles={vehicles} sales={sales} vehicleExpenses={vehicleExpenses} search={search} setSearch={setSearch} onAdd={() => { setEditingVehicle(null); setShowVehicleForm(true); }} onEdit={(v) => { setEditingVehicle(null); setEditingVehicle(v); setShowVehicleForm(true); }} onDelete={removeVehicle} onSell={(v) => { setEditingSale(null); setSellingVehicle(v); }} onEditSale={(v, sale) => { setEditingSale(sale); setSellingVehicle(v); }} onRestoreSale={async (v, sale) => { const saleResult = await supabase.from('carwin_sales').update({ status: 'cancelled' }).eq('id', sale.id); const vehicleResult = await supabase.from('carwin_vehicles').update({ status: 'active' }).eq('id', v.id); if (saleResult.error || vehicleResult.error) { setError('No se pudo devolver el auto a activos.'); return; } void loadData(); }} onManageExpenses={setExpenseVehicle} />}
-        {view === 'expenses' && <OfficeExpenses isAdmin={isAdmin} expenses={officeExpenses} monthPrefix={monthPrefix} onAdd={() => setShowOfficeForm(true)} onDelete={async (id) => { await supabase.from('carwin_office_expenses').delete().eq('id', id); setOfficeExpenses((items) => items.filter((item) => item.id !== id)); }} />}
+        {view === 'expenses' && <OfficeExpenses isAdmin={isAdmin} expenses={officeExpenses} monthPrefix={monthPrefix} onAdd={() => setShowOfficeForm(true)} onDelete={async (id) => { if (!isAdmin || !window.confirm('¿Eliminar este gasto?')) return; const result = await supabase.from('carwin_office_expenses').delete().eq('id', id).select('id').maybeSingle(); if (result.error || !result.data) { setError('No se pudo eliminar el gasto.'); return; } setOfficeExpenses((items) => items.filter((item) => item.id !== id)); }} />}
         {view === 'calculators' && <Calculators settings={settings} />}
         {view === 'simulador' && <SimuladorCuotas ufValue={settings.uf_value} />}
       </main>
@@ -368,8 +381,8 @@ function App({ isAdmin = false }: { isAdmin?: boolean }) {
 }
 
 function calculateVehicleExpenseTotal(vehicle: Vehicle, expenses: VehicleExpense[], dailyStayCost = DEFAULT_DAILY_STAY_COST) {
-  const directExpenses = expenses.filter((e) => e.vehicle_id === vehicle.id).reduce((total, e) => total + e.amount, 0);
-  const parking = isPhysical(vehicle.vehicle_type) ? dailyStayCost * daysBetween(vehicle.entered_at) : 0;
+  const directExpenses = expenses.filter((e) => e.vehicle_id === vehicle.id && !e.is_daily_stay).reduce((total, e) => total + e.amount, 0);
+  const parking = isPhysical(vehicle.vehicle_type) ? (vehicle.status === 'sold' ? expenses.find(e => e.vehicle_id === vehicle.id && e.is_daily_stay)?.amount ?? 0 : dailyStayCost * daysBetween(vehicle.entered_at)) : 0;
   return directExpenses + parking;
 }
 
@@ -422,12 +435,12 @@ function Dashboard({ isAdmin, activeVehicles, selectedMonth, setSelectedMonth, m
     <section className="kpi-grid">
       <KpiCard label="Utilidad neta del mes" value={money(monthUtility)} detail={`Utilidad ventas ${money(monthSalesTotal)} - Oficina ${money(officeTotal)}`} icon={<TrendingUp size={19} />} tone={utilityTone} trend={monthUtility >= 0 ? 'Positivo' : 'Negativo'} />
       <KpiCard label="Gastos de oficina" value={money(officeTotal)} detail="Acumulado mensual" icon={<Wallet size={19} />} tone="amber" />
-      <KpiCard label="Utilidad potencial" value={money(potentialProfit)} detail="Margen del stock activo" icon={<CircleDollarSign size={19} />} tone="blue" trend="+12.4%" />
+      <KpiCard label="Utilidad potencial" value={money(potentialProfit)} detail="Margen del stock activo" icon={<CircleDollarSign size={19} />} tone="blue"  />
     </section>
     <section className={`alert-strip ${documentationAlerts > 0 || physicalAging > 0 ? 'has-alerts' : 'clear-alerts'}`}><div className="alert-title"><div className="alert-icon"><AlertTriangle size={20} /></div><div><strong>Atención operativa</strong><p>Revisa estos puntos antes de cerrar el mes</p></div></div><div className="alert-stat"><strong>{documentationAlerts}</strong><span>docs por vencer</span></div><div className="alert-stat"><strong>{physicalAging}</strong><span>autos +60 días</span></div></section>
     <section className="section-heading"><div><p className="eyebrow">RENDIMIENTO DE STOCK</p><h3>Vehículos destacados</h3></div><button className="text-button" onClick={onSeeInventory}>Ver todo <ChevronRight size={18} /></button></section>
 <section className="vehicle-list">{topVehicles.map((v) => <VehicleRow isAdmin={isAdmin} key={v.id} vehicle={v} margin={calculateVehicleMargin(v, vehicleExpenses)} expenseTotal={calculateVehicleExpenseTotal(v, vehicleExpenses)} onSell={() => onSell(v)} onManageExpenses={() => onManageExpenses(v)} />)}</section>
-    <section className="quick-actions">{isAdmin && <button onClick={onSeeInventory}><Plus size={20} /><span><strong>Ingresar vehículo</strong><small>Agregar al stock actual</small></span><ChevronRight size={19} /></button>}<button onClick={() => document.getElementById('monthly-analysis')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}><BarChart3 size={20} /><span><strong>Ver análisis mensual</strong><small>Rendimiento del mes seleccionado</small></span><ChevronRight size={19} /></button></section><section id="monthly-analysis" className="monthly-analysis"><div className="section-heading"><div><p className="eyebrow">ANÁLISIS MENSUAL</p><h3>Noviembre 2026</h3></div><BarChart3 size={26} /></div><div className="analysis-grid"><div className="analysis-stat"><span>Ventas concretadas</span><strong>{monthSalesTotal > 0 ? 'Con actividad' : 'Sin ventas aún'}</strong><small>Utilidad de ventas: {money(monthSalesTotal)}</small></div><div className="analysis-stat"><span>Gastos de oficina</span><strong>{money(officeTotal)}</strong><small>Registrados durante el mes</small></div><div className={`analysis-stat ${monthUtility >= 0 ? 'positive' : 'negative'}`}><span>Resultado neto</span><strong>{money(monthUtility)}</strong><small>{monthUtility >= 0 ? 'Resultado favorable' : 'Requiere revisión'}</small></div></div><div className="analysis-bars"><div><span><b>Ventas</b><strong>{money(monthSalesTotal)}</strong></span><i><em style={{ width: `${monthSalesTotal > 0 ? '100%' : '4%'}` }} /></i></div><div><span><b>Gastos oficina</b><strong>{money(officeTotal)}</strong></span><i><em className="orange-bar" style={{ width: `${monthSalesTotal > 0 ? `${Math.max(4, Math.min(100, Math.round((officeTotal / monthSalesTotal) * 100)))}%` : officeTotal > 0 ? '100%' : '4%'}` }} /></i></div><div><span><b>Utilidad neta</b><strong>{money(Math.max(0, monthUtility))}</strong></span><i><em className="green-bar" style={{ width: `${monthSalesTotal > 0 ? `${Math.max(4, Math.min(100, Math.round((Math.max(0, monthUtility) / monthSalesTotal) * 100)))}%` : '4%'}` }} /></i></div></div></section>
+    <section className="quick-actions">{isAdmin && <button onClick={onSeeInventory}><Plus size={20} /><span><strong>Ingresar vehículo</strong><small>Agregar al stock actual</small></span><ChevronRight size={19} /></button>}<button onClick={() => document.getElementById('monthly-analysis')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}><BarChart3 size={20} /><span><strong>Ver análisis mensual</strong><small>Rendimiento del mes seleccionado</small></span><ChevronRight size={19} /></button></section><section id="monthly-analysis" className="monthly-analysis"><div className="section-heading"><div><p className="eyebrow">ANÁLISIS MENSUAL</p><h3>{new Intl.DateTimeFormat('es-CL', {month:'long', year:'numeric'}).format(new Date(`${selectedMonth}-15T12:00:00`))}</h3></div><BarChart3 size={26} /></div><div className="analysis-grid"><div className="analysis-stat"><span>Ventas concretadas</span><strong>{monthSalesTotal > 0 ? 'Con actividad' : 'Sin ventas aún'}</strong><small>Utilidad de ventas: {money(monthSalesTotal)}</small></div><div className="analysis-stat"><span>Gastos de oficina</span><strong>{money(officeTotal)}</strong><small>Registrados durante el mes</small></div><div className={`analysis-stat ${monthUtility >= 0 ? 'positive' : 'negative'}`}><span>Resultado neto</span><strong>{money(monthUtility)}</strong><small>{monthUtility >= 0 ? 'Resultado favorable' : 'Requiere revisión'}</small></div></div><div className="analysis-bars"><div><span><b>Ventas</b><strong>{money(monthSalesTotal)}</strong></span><i><em style={{ width: `${monthSalesTotal > 0 ? '100%' : '4%'}` }} /></i></div><div><span><b>Gastos oficina</b><strong>{money(officeTotal)}</strong></span><i><em className="orange-bar" style={{ width: `${monthSalesTotal > 0 ? `${Math.max(4, Math.min(100, Math.round((officeTotal / monthSalesTotal) * 100)))}%` : officeTotal > 0 ? '100%' : '4%'}` }} /></i></div><div><span><b>Utilidad neta</b><strong>{money(Math.max(0, monthUtility))}</strong></span><i><em className="green-bar" style={{ width: `${monthSalesTotal > 0 ? `${Math.max(4, Math.min(100, Math.round((Math.max(0, monthUtility) / monthSalesTotal) * 100)))}%` : '4%'}` }} /></i></div></div></section>
   </>;
 }
 
@@ -437,7 +450,7 @@ function Inventory({ isAdmin, vehicles, sales, vehicleExpenses, search, setSearc
   const active = vehicles.filter((v) => v.status === 'active');
   const sold = vehicles.filter((v) => v.status === 'sold');
   const visibleVehicles = (stockView === 'active' ? active : sold).filter((v) => v.model.toLowerCase().includes(search.toLowerCase()) || v.plate.toLowerCase().includes(search.toLowerCase()));
-  return <><section className="page-heading"><div><p className="eyebrow">GESTIÓN DE INVENTARIO</p><h2>Stock <span>{stockView === 'active' ? 'activo' : 'vendido'}</span></h2><p className="muted">{stockView === 'active' ? `${active.length} vehículos disponibles` : `${sold.length} operaciones vendidas y editables`}</p></div>{isAdmin && <button className="primary-button" onClick={onAdd}><Plus size={20} /> Nuevo auto</button>}</section><div className="stock-tabs"><button className={stockView === 'active' ? 'active' : ''} onClick={() => setStockView('active')}>Activos <b>{active.length}</b></button><button className={stockView === 'sold' ? 'active' : ''} onClick={() => setStockView('sold')}>Vendidos <b>{sold.length}</b></button></div><div className="search-box"><Search size={19} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar modelo o patente..." /></div>{visibleVehicles.length ? <section className="inventory-grid">{visibleVehicles.map((v) => <InventoryCard isAdmin={isAdmin} key={v.id} vehicle={v} sale={sales.find((sale) => sale.vehicle_id === v.id)} expenseTotal={calculateVehicleExpenseTotal(v, vehicleExpenses)} margin={calculateVehicleMargin(v, vehicleExpenses)} onEdit={() => onEdit(v)} onDelete={() => onDelete(v)} onSell={() => onSell(v)} onEditSale={(sale) => onEditSale(v, sale)} onRestoreSale={(sale) => void onRestoreSale(v, sale)} onManageExpenses={() => onManageExpenses(v)} onContract={() => setContractVehicle(v)} />)}</section> : <EmptyState text={stockView === 'sold' ? 'Aún no hay vehículos vendidos.' : 'No hay vehículos que coincidan con la búsqueda.'} />}{contractVehicle && <ConsignmentContractModal vehicle={contractVehicle} onClose={() => setContractVehicle(null)} />}</>;
+  return <><section className="page-heading"><div><p className="eyebrow">GESTIÓN DE INVENTARIO</p><h2>Stock <span>{stockView === 'active' ? 'activo' : 'vendido'}</span></h2><p className="muted">{stockView === 'active' ? `${active.length} vehículos disponibles` : `${sold.length} operaciones vendidas y editables`}</p></div>{isAdmin && <button className="primary-button" onClick={onAdd}><Plus size={20} /> Nuevo auto</button>}</section><div className="stock-tabs"><button className={stockView === 'active' ? 'active' : ''} onClick={() => setStockView('active')}>Activos <b>{active.length}</b></button><button className={stockView === 'sold' ? 'active' : ''} onClick={() => setStockView('sold')}>Vendidos <b>{sold.length}</b></button></div><div className="search-box"><Search size={19} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar modelo o patente..." /></div>{visibleVehicles.length ? <section className="inventory-grid">{visibleVehicles.map((v) => <InventoryCard isAdmin={isAdmin} key={v.id} vehicle={v} sale={sales.find((sale) => sale.vehicle_id === v.id && sale.status !== 'cancelled')} expenseTotal={calculateVehicleExpenseTotal(v, vehicleExpenses)} margin={calculateVehicleMargin(v, vehicleExpenses)} onEdit={() => onEdit(v)} onDelete={() => onDelete(v)} onSell={() => onSell(v)} onEditSale={(sale) => onEditSale(v, sale)} onRestoreSale={(sale) => void onRestoreSale(v, sale)} onManageExpenses={() => onManageExpenses(v)} onContract={() => setContractVehicle(v)} />)}</section> : <EmptyState text={stockView === 'sold' ? 'Aún no hay vehículos vendidos.' : 'No hay vehículos que coincidan con la búsqueda.'} />}{contractVehicle && <ConsignmentContractModal vehicle={contractVehicle} onClose={() => setContractVehicle(null)} />}</>;
 }
 
 function OfficeExpenses({ isAdmin, expenses, monthPrefix, onAdd, onDelete }: { isAdmin: boolean; expenses: OfficeExpense[]; monthPrefix: string; onAdd: () => void; onDelete: (id: string) => void }) {
@@ -524,8 +537,9 @@ function Reports({ vehicles, sales, vehicleExpenses, salePayments, officeExpense
   }, [expenseQuery, vehicleExpenses, officeExpenses, vehicles, normQuery, hasQuery]);
 
   const monthTotal = searchResults.filter((r) => r.monthKey === monthPrefix).reduce((s, r) => s + r.amount, 0);
-  const ytdTotal = searchResults.reduce((s, r) => s + r.amount, 0);
-  const monthCount = new Set(searchResults.map((r) => r.monthKey)).size || 1;
+  const yearResults = searchResults.filter(r => r.monthKey.startsWith(monthPrefix.slice(0, 4)) && r.monthKey <= monthPrefix);
+  const ytdTotal = yearResults.reduce((s, r) => s + r.amount, 0);
+  const monthCount = Number(monthPrefix.slice(5, 7)) || 1;
   const avgMonthly = ytdTotal / monthCount;
 
   const monthBuckets = useMemo(() => {
@@ -584,11 +598,11 @@ function OfficeExpenseForm({ onClose, onSave }: { onClose: () => void; onSave: (
 
 function VehicleExpenseModal({ isAdmin, vehicle, expenses, dailyStayCost, onClose, onAdd, onUpdate, onDelete }: { isAdmin: boolean; vehicle: Vehicle; expenses: VehicleExpense[]; dailyStayCost: number; onClose: () => void; onAdd: (vehicleId: string, description: string, amount: number, expenseType: ExpenseType, allocation: ExpenseAllocation) => Promise<void>; onUpdate: (id: string, description: string, amount: number, allocation: ExpenseAllocation) => Promise<void>; onDelete: (id: string) => void }) {
   const [description, setDescription] = useState(''); const [amount, setAmount] = useState(''); const [expenseType, setExpenseType] = useState<ExpenseType>('extra'); const [allocation, setAllocation] = useState<ExpenseAllocation>('carwin'); const [saving, setSaving] = useState(false); const [editingId, setEditingId] = useState<string | null>(null); const [editingDescription, setEditingDescription] = useState(''); const [editingAmount, setEditingAmount] = useState(''); const [editingAllocation, setEditingAllocation] = useState<ExpenseAllocation>('carwin');
-  const grouped = useMemo(() => groupExpenses(expenses), [expenses]);
+  const grouped = useMemo(() => groupExpenses(expenses.filter(e => !e.is_daily_stay)), [expenses]);
   const grandTotal = grouped.reduce((sum, g) => sum + g.total, 0);
   const [stayDays, setStayDays] = useState(() => { if (vehicle.status === 'sold') { const stayExpense = expenses.find((e) => e.is_daily_stay); if (stayExpense) { const match = stayExpense.description.match(/(\d+)\s+días/); if (match) return Number(match[1]); } } return daysBetween(vehicle.entered_at); });
   const [stayEdit, setStayEdit] = useState(false);
-  const parkingCost = isPhysical(vehicle.vehicle_type) ? dailyStayCost * stayDays : 0;
+  const parkingCost = isPhysical(vehicle.vehicle_type) ? (vehicle.status === 'sold' ? expenses.find(e => e.is_daily_stay)?.amount ?? dailyStayCost * stayDays : dailyStayCost * stayDays) : 0;
   const totalWithParking = grandTotal + parkingCost;
   const submit = async (event: FormEvent) => { event.preventDefault(); if (!description) return; setSaving(true); try { await onAdd(vehicle.id, description, Number(amount) || 0, expenseType, allocation); setDescription(''); setAmount(''); } finally { setSaving(false); } };
   const startEdit = (expense: VehicleExpense) => { setEditingId(expense.id); setEditingDescription(expense.description); setEditingAmount(expense.amount.toString()); setEditingAllocation(expense.allocation); };
@@ -598,8 +612,8 @@ function VehicleExpenseModal({ isAdmin, vehicle, expenses, dailyStayCost, onClos
     <div className="expense-grand-total"><div><span>Total de gastos{parkingCost > 0 ? ' (incluye estacionamiento)' : ''}</span><strong>{money(totalWithParking)}</strong></div><div className="expense-total-icon"><Wallet size={22} /></div></div>
     {grouped.length > 0 && <><div className="sale-section-title"><span>Gastos consolidados</span><small>Items repetidos se suman automáticamente</small></div><div className="grouped-list">{grouped.map((g) => <div className="grouped-row" key={g.key}><div className="grouped-info"><strong>{g.description}</strong><span>{g.count} registro{g.count > 1 ? 's' : ''}</span></div><strong className="grouped-amount">{money(g.total)}</strong></div>)}</div></>}
     <div className="sale-section-title"><span>Detalle de movimientos</span></div>
-    {parkingCost > 0 && <div className="parking-detail-card"><div className="parking-detail-icon"><MapPin size={18} /></div><div className="parking-detail-info"><strong>Estacionamiento / Estadía</strong><div className="stay-edit-row"><input type="number" min="1" className="stay-days-input" readOnly={!isAdmin} value={stayDays} onChange={(e) => { setStayDays(Number(e.target.value) || 1); setStayEdit(true); }} /><span>{money(dailyStayCost)} por día</span></div><small>{vehicle.status === 'sold' ? 'Días fijados al vender' : 'Asignado a: CARWIN (calculado automáticamente)'}</small></div><strong className="parking-detail-amount">{money(parkingCost)}</strong></div>}
-    <div className="expense-list compact-list">{expenses.map((e) => editingId === e.id ? <div className="expense-row expense-edit-row" key={e.id}><input value={editingDescription} onChange={(event) => setEditingDescription(event.target.value)} /><input type="number" value={editingAmount} onChange={(event) => setEditingAmount(event.target.value)} /><select value={editingAllocation} onChange={(event) => setEditingAllocation(event.target.value as ExpenseAllocation)}><option value="carwin">CARWIN</option><option value="customer">Cliente</option><option value="shared">Compartido</option></select><button className="row-action" onClick={() => void saveEdit()}><Check size={16} /></button><button className="row-action danger" onClick={() => setEditingId(null)}><X size={16} /></button></div> : <div className="expense-row" key={e.id}><div className="expense-dot small"><ReceiptText size={14} /></div><div className="expense-info"><strong>{e.description}</strong><span>{e.expense_type === 'wash' ? 'Lavado/Pulido' : e.is_daily_stay ? 'Estadía diaria' : 'Extra'} · {e.allocation === 'customer' ? 'Cobrado al cliente' : e.allocation === 'shared' ? 'Compartido' : 'Asumido por CARWIN'} · {money(e.amount)}</span></div>{isAdmin && <><button className="row-action" onClick={() => startEdit(e)}><Pencil size={16} /></button><button className="row-action danger" onClick={() => onDelete(e.id)}><Trash2 size={16} /></button></>}</div>)}</div>
+    {parkingCost > 0 && <div className="parking-detail-card"><div className="parking-detail-icon"><MapPin size={18} /></div><div className="parking-detail-info"><strong>Estacionamiento / Estadía</strong><div className="stay-edit-row"><input type="number" min="1" className="stay-days-input" readOnly value={stayDays} onChange={(e) => { setStayDays(Number(e.target.value) || 1); setStayEdit(true); }} /><span>{money(dailyStayCost)} por día</span></div><small>{vehicle.status === 'sold' ? 'Días fijados al vender' : 'Asignado a: CARWIN (calculado automáticamente)'}</small></div><strong className="parking-detail-amount">{money(parkingCost)}</strong></div>}
+    <div className="expense-list compact-list">{expenses.filter(e => !e.is_daily_stay).map((e) => editingId === e.id ? <div className="expense-row expense-edit-row" key={e.id}><input value={editingDescription} onChange={(event) => setEditingDescription(event.target.value)} /><input type="number" value={editingAmount} onChange={(event) => setEditingAmount(event.target.value)} /><select value={editingAllocation} onChange={(event) => setEditingAllocation(event.target.value as ExpenseAllocation)}><option value="carwin">CARWIN</option><option value="customer">Cliente</option><option value="shared">Compartido</option></select><button className="row-action" onClick={() => void saveEdit()}><Check size={16} /></button><button className="row-action danger" onClick={() => setEditingId(null)}><X size={16} /></button></div> : <div className="expense-row" key={e.id}><div className="expense-dot small"><ReceiptText size={14} /></div><div className="expense-info"><strong>{e.description}</strong><span>{e.expense_type === 'wash' ? 'Lavado/Pulido' : e.is_daily_stay ? 'Estadía diaria' : 'Extra'} · {e.allocation === 'customer' ? 'Cobrado al cliente' : e.allocation === 'shared' ? 'Compartido' : 'Asumido por CARWIN'} · {money(e.amount)}</span></div>{isAdmin && <><button className="row-action" onClick={() => startEdit(e)}><Pencil size={16} /></button><button className="row-action danger" onClick={() => onDelete(e.id)}><Trash2 size={16} /></button></>}</div>)}</div>
 {isAdmin && <form className="add-expense-form" onSubmit={submit}>
       <div className="sale-section-title"><span>Agregar gasto</span></div>
       <Field label="Tipo"><select value={expenseType} onChange={(e) => setExpenseType(e.target.value as ExpenseType)}><option value="extra">Extra</option><option value="wash">Lavado y pulido</option></select></Field><Field label="Responsable del gasto"><select value={allocation} onChange={(e) => setAllocation(e.target.value as ExpenseAllocation)}><option value="carwin">Asumido por CARWIN</option><option value="customer">Cobrado al cliente</option><option value="shared">Compartido</option></select></Field>
@@ -616,8 +630,9 @@ const [transferCost, setTransferCost] = useState(sale?.transfer_cost ?? 0);
 const defaultSoldAt = sale?.sold_at ?? todayChile();
   const [soldAt, setSoldAt] = useState(defaultSoldAt);
   const autoStayDays = isPhysical(vehicle.vehicle_type) ? daysBetweenDates(vehicle.entered_at, soldAt) : 0;
-  const [stayDays, setStayDays] = useState(autoStayDays);
-  const [stayEdit, setStayEdit] = useState(false);
+  const savedStayDays = sale ? Number(expenses.find(e => e.is_daily_stay)?.description.match(/(\d+)\s+días/)?.[1]) || autoStayDays : autoStayDays;
+  const [stayDays, setStayDays] = useState(savedStayDays);
+  const [stayEdit, setStayEdit] = useState(savedStayDays !== autoStayDays);
   const parking = isPhysical(vehicle.vehicle_type) ? dailyStayCost * stayDays : 0;
   const lines = useMemo(() => [...expenses.filter((e) => !e.is_daily_stay).map((e) =>({ id: e.id, description: e.description, amount: e.amount, expense_type: e.expense_type, allocation: e.allocation })), ...(parking > 0 ? [{ id: 'parking', description: `Estadía · ${stayDays} días × ${money(dailyStayCost)}`, amount: parking, expense_type: 'parking' as const, allocation: 'carwin' as const }] : [])], [expenses, parking, dailyStayCost, stayDays]);
   const initialSelected = sale ? [...sale.charged_expense_ids, ...(sale.parking_charged ? ['parking'] : [])] : lines.map((l) => l.id);
@@ -641,7 +656,10 @@ const totalToCollect = Number(realPrice || 0) + transferExtra;
   const [exporting, setExporting] = useState(false);
 
   const addExtra = async () => { if (!newExpense) return; await onAddExpense(vehicle.id, newExpense, Number(newAmount) || 0, newExpenseType); setNewExpense(''); setNewAmount(''); };
-  const addPayment = async () => { if (!sale || !Number(paymentAmount)) return; await onAddPayment(sale.id, { payment_date: paymentDate, method: paymentMethod, amount: Number(paymentAmount), bank: paymentBank, operation_reference: paymentReference, receipt_url: null, verified: paymentVerified, notes: '' }); setPaymentAmount(''); setPaymentBank(''); setPaymentReference(''); setPaymentVerified(false); };
+  const paymentLock = useRef(false);
+  const [paymentBusy, setPaymentBusy] = useState(false);
+  const [paymentError, setPaymentError] = useState('');
+  const addPayment = async () => { if (!sale || paymentLock.current) return; const amount = Number(paymentAmount); if (!Number.isSafeInteger(amount) || amount <= 0 || !paymentDate) { setPaymentError('Ingresa un monto positivo en pesos y una fecha válida.'); return; } if (amount + payments.reduce((sum, p) => sum + Number(p.amount), 0) > totalToCollect && !window.confirm('Este pago supera el total a cobrar considerando los pagos registrados. ¿Continuar?')) return; paymentLock.current = true; setPaymentBusy(true); setPaymentError(''); try { await onAddPayment(sale.id, { payment_date: paymentDate, method: paymentMethod, amount: Number(paymentAmount), bank: paymentBank, operation_reference: paymentReference, receipt_url: null, verified: paymentVerified, notes: '' }); setPaymentAmount(''); setPaymentBank(''); setPaymentReference(''); setPaymentVerified(false); } catch { setPaymentError('No se pudo registrar el pago. Revisa antes de reintentar.'); } finally { paymentLock.current = false; setPaymentBusy(false); } };
   const totalReceived = payments.filter((payment) => payment.verified).reduce((sum, payment) => sum + payment.amount, 0);
 const pendingBalance = Math.max(0, totalToCollect - totalReceived);
   const handleSold = async () => {
@@ -731,8 +749,9 @@ const pendingBalance = Math.max(0, totalToCollect - totalReceived);
       <div className="charge-summary"><div className="sale-section-title"><span>Gastos cobrados al cliente</span></div>{lines.filter((l) => selected.includes(l.id)).length > 0 ? lines.filter((l) => selected.includes(l.id)).map((l) => <div className="charge-summary-row" key={l.id}><span>{l.description}</span><strong>{money(l.amount)}</strong></div>) : <p className="charge-summary-empty">Sin gastos cobrados</p>}</div>
       <div className="transfer-total"><span>Monto final a transferir</span><strong>{money(finalAmount)}</strong><small>Saldo acordado menos gastos cobrados al cliente</small></div><div className={`sale-decision ${saleIsViable ? 'viable' : 'not-viable'}`}><div><span>Utilidad neta CARWIN</span><small>Venta real menos compra y gastos asumidos por CARWIN</small></div><strong>{money(projectedUtility)}</strong><b>{saleIsViable ? 'APTO PARA VENDER' : 'NO APTO A ESTE PRECIO'}</b></div>
     </div>
-    <div className="payment-panel"><div className="sale-section-title"><span><CreditCard size={16} /> Pagos recibidos</span><small>{sale ? `${payments.filter((payment) => payment.verified).length} verificados` : 'Guarda la venta para registrar pagos'}</small></div>{sale ? <><div className="payment-summary"><div><span>Total verificado</span><strong>{money(totalReceived)}</strong></div><div><span>Saldo pendiente</span><strong>{money(pendingBalance)}</strong></div><div><span>Pagado</span><strong>{totalToCollect > 0 ? `${Math.min(100, Math.round((totalReceived / totalToCollect) * 100))}%` : '0%'}</strong></div></div><div className="payment-progress"><div className="payment-progress-fill" style={{ width: `${totalToCollect > 0 ? Math.min(100, Math.round((totalReceived / totalToCollect) * 100)) : 0}%` }} /></div><div className="payment-list">{payments.map((payment) => <div className="payment-row" key={payment.id}><div><strong>{money(payment.amount)}</strong><span>{paymentMethodLabel(payment.method)} · {dateLabel(payment.payment_date)}{payment.operation_reference ? ` · ${payment.operation_reference}` : ''}</span></div><b className={payment.verified ? 'verified-payment' : 'pending-payment'}>{payment.verified ? 'Verificado' : 'Pendiente'}</b><button className="row-action danger" onClick={() => void onDeletePayment(payment.id)}><Trash2 size={15} /></button></div>)}</div></> : <p className="form-hint"><FileText size={15} /> Guarda la venta para registrar sus pagos.</p>}</div>
-    {sale && <div className="payment-form"><input type="date" value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} /><select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value as PaymentMethod)}><option value="cash">Efectivo</option><option value="bank_draft">Vale vista</option><option value="bank_transfer">Transferencia</option><option value="card">Tarjeta</option><option value="trade_in">Vehículo en parte de pago</option></select><input type="number" value={paymentAmount} onChange={(event) => setPaymentAmount(event.target.value)} placeholder="Monto" /><input value={paymentBank} onChange={(event) => setPaymentBank(event.target.value)} placeholder="Banco" /><input value={paymentReference} onChange={(event) => setPaymentReference(event.target.value)} placeholder="N° operación" /><label className="check-field"><input type="checkbox" checked={paymentVerified} onChange={(event) => setPaymentVerified(event.target.checked)} /> Verificado</label><button className="secondary-button" onClick={() => void addPayment()}><Plus size={16} /> Agregar pago</button></div>}
+    <div className="payment-panel"><div className="sale-section-title"><span><CreditCard size={16} /> Pagos recibidos</span><small>{sale ? `${payments.filter((payment) => payment.verified).length} verificados` : 'Guarda la venta para registrar pagos'}</small></div>{sale ? <><div className="payment-summary"><div><span>Total verificado</span><strong>{money(totalReceived)}</strong></div><div><span>Saldo pendiente</span><strong>{money(pendingBalance)}</strong>{totalReceived > totalToCollect && <small>Excedente: {money(totalReceived - totalToCollect)}</small>}</div><div><span>Pagado</span><strong>{totalToCollect > 0 ? `${Math.min(100, Math.round((totalReceived / totalToCollect) * 100))}%` : '0%'}</strong></div></div><div className="payment-progress"><div className="payment-progress-fill" style={{ width: `${totalToCollect > 0 ? Math.min(100, Math.round((totalReceived / totalToCollect) * 100)) : 0}%` }} /></div><div className="payment-list">{payments.map((payment) => <div className="payment-row" key={payment.id}><div><strong>{money(payment.amount)}</strong><span>{paymentMethodLabel(payment.method)} · {dateLabel(payment.payment_date)}{payment.operation_reference ? ` · ${payment.operation_reference}` : ''}</span></div><b className={payment.verified ? 'verified-payment' : 'pending-payment'}>{payment.verified ? 'Verificado' : 'Pendiente'}</b><button className="row-action danger" onClick={() => void onDeletePayment(payment.id)}><Trash2 size={15} /></button></div>)}</div></> : <p className="form-hint"><FileText size={15} /> Guarda la venta para registrar sus pagos.</p>}</div>
+    {sale && <div className="payment-form"><input type="date" value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} /><select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value as PaymentMethod)}><option value="cash">Efectivo</option><option value="bank_draft">Vale vista</option><option value="bank_transfer">Transferencia</option><option value="card">Tarjeta</option><option value="trade_in">Vehículo en parte de pago</option></select><input type="number" value={paymentAmount} onChange={(event) => setPaymentAmount(event.target.value)} placeholder="Monto" /><input value={paymentBank} onChange={(event) => setPaymentBank(event.target.value)} placeholder="Banco" /><input value={paymentReference} onChange={(event) => setPaymentReference(event.target.value)} placeholder="N° operación" /><label className="check-field"><input type="checkbox" checked={paymentVerified} onChange={(event) => setPaymentVerified(event.target.checked)} /> Verificado</label><button className="secondary-button" disabled={paymentBusy} onClick={() => void addPayment()}><Plus size={16} /> {paymentBusy ? 'Guardando...' : 'Agregar pago'}</button></div>}
+    {paymentError && <p className="form-error">{paymentError}</p>}
     {exportError && <p className="form-error">{exportError}</p>}
     <div className="sale-actions">
       {sale && <button className="copy-button" onClick={() => setShowSaleNote(true)}><FileText size={18} /> Ver nota de venta</button>}
@@ -746,7 +765,7 @@ const pendingBalance = Math.max(0, totalToCollect - totalReceived);
 
 function SaleNoteModal({ vehicle, sale, payments, buyerData, onClose }: { vehicle: Vehicle; sale: Sale; payments: SalePayment[]; buyerData: { buyer_name: string; buyer_rut: string; buyer_address: string; buyer_phone: string; delivery_date: string | null; terms: string }; onClose: () => void }) {
   const totalReceived = payments.filter((payment) => payment.verified).reduce((sum, payment) => sum + payment.amount, 0);
-  const fullDate = new Intl.DateTimeFormat('es-CL', { day: '2-digit', month: 'long', year: 'numeric' }).format(new Date('2026-11-08T12:00:00'));
+  const fullDate = new Intl.DateTimeFormat('es-CL', { day: '2-digit', month: 'long', year: 'numeric' }).format(new Date(`${sale.sold_at}T12:00:00`));
   const noteRef = useRef<HTMLDivElement>(null);
   const [printing, setPrinting] = useState(false);
 
@@ -810,14 +829,17 @@ function SaleNoteModal({ vehicle, sale, payments, buyerData, onClose }: { vehicl
           <div><small>Kilómetros</small><strong>{vehicle.kilometers.toLocaleString('es-CL')}</strong></div>
           <div><small>Color</small><strong>{vehicle.color}</strong></div>
           <div><small>Tipo</small><strong>{typeLabel(vehicle.vehicle_type)}</strong></div>
-          <div><small>Año</small><strong>{new Date(vehicle.entered_at).getFullYear()}</strong></div>
+          
         </div>
       </div>
       {buyerData.terms && <div className="note-section"><div className="note-section-title">Condiciones</div><p className="note-terms">{buyerData.terms}</p></div>}
       <div className="note-section"><div className="note-section-title">Detalle financiero</div>
         <div className="note-finance-table">
           <div className="note-finance-row total"><span>Precio venta real</span><strong>{money(sale.real_sale_price)}</strong></div>
-          {totalReceived > sale.real_sale_price && <div className="note-finance-row"><span>Costo de transferencia</span><strong>{money(totalReceived - sale.real_sale_price)}</strong></div>}
+          <div className="note-finance-row"><span>Transferencia</span><strong>{sale.transfer_mode === 'direct' ? 'Pago directo comprador' : sale.transfer_mode === 'included' ? 'Incluida en precio' : sale.transfer_mode === 'separate' ? money(sale.transfer_cost ?? 0) : 'Por confirmar'}</strong></div>
+          <div className="note-finance-row"><span>Total a cobrar</span><strong>{money(sale.real_sale_price + (sale.transfer_mode === 'separate' ? sale.transfer_cost ?? 0 : 0))}</strong></div>
+          <div className="note-finance-row"><span>Pagos verificados</span><strong>{money(totalReceived)}</strong></div>
+          <div className="note-finance-row"><span>Saldo pendiente</span><strong>{money(Math.max(0, sale.real_sale_price + (sale.transfer_mode === 'separate' ? sale.transfer_cost ?? 0 : 0) - totalReceived))}</strong></div>
         </div>
       </div>
       {payments.length > 0 && <div className="note-section"><div className="note-section-title">Pagos registrados</div>
