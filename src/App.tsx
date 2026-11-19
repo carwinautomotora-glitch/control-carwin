@@ -418,6 +418,15 @@ function Inventory({ isAdmin, vehicles, sales, vehicleExpenses, search, setSearc
 
 function OfficeExpenses({ isAdmin, expenses, monthPrefix, onAdd, onDelete }: { isAdmin: boolean; expenses: OfficeExpense[]; monthPrefix: string; onAdd: () => void; onDelete: (id: string) => void }) {
   const [showAllYear, setShowAllYear] = useState(false);
+    const [selectedMonth, setSelectedMonth] = useState(monthPrefix.slice(5, 7));
+  const [selectedYear, setSelectedYear] = useState(monthPrefix.slice(0, 4));
+  const selectedPeriod = `${selectedYear}-${selectedMonth}`;
+  const availableYears = Array.from(
+    new Set([
+      todayChile().slice(0, 4),
+      ...expenses.map((item) => item.expense_date.slice(0, 4)),
+    ])
+  ).sort().reverse();
   const filtered = showAllYear ? expenses : expenses.filter((item) => item.expense_date.startsWith(monthPrefix));
   const total = filtered.reduce((sum, item) => sum + item.amount, 0);
   const grouped = filtered.reduce<Record<string, number>>((acc, item) => { acc[item.description] = (acc[item.description] ?? 0) + item.amount; return acc; }, {});
