@@ -63,6 +63,7 @@ type PaymentMethod = 'cash' | 'bank_draft' | 'bank_transfer' | 'card' | 'trade_i
 type View = 'dashboard' | 'inventory' | 'expenses' | 'calculators' | 'simulador' | 'reports';
 
 interface Vehicle {
+  photo_path?: string | null;
   id: string;
   model: string;
   plate: string;
@@ -274,13 +275,29 @@ function App({ isAdmin = false }: { isAdmin?: boolean }) {
   const physicalAging = activeVehicles.filter((v) => isPhysical(v.vehicle_type) && daysBetween(v.entered_at) > 60).length;
   const documentationAlerts = activeVehicles.reduce((total, v) => total + expiringDocuments(v), 0);
 
-  const saveVehicle = async (data: Omit<Vehicle, 'id' | 'status'>, id?: string) => {
+  const saveVehicle = async (data: Omit<Vehicle, 'id' | 'status'>, id?: string, photo?: File | null, removePhoto = false) => {
     if (!isAdmin) throw new Error("Acceso de solo lectura");
-    const payload = { ...data, plate: data.plate.toUpperCase() };
+    const oldPath = id ? vehicles.find(v => v.id === id)?.photo_path : null;
+    let newPath: string | undefined;
+    if (photo) {
+      const ext = ({'image/jpeg':'jpg','image/png':'png','image/webp':'webp'} as Record<string,string>)[photo.type];
+      if (!ext || photo.size > 5 * 1024 * 1024) throw new Error('Usa JPG, PNG o WebP de hasta 5 MB');
+      newPath = `${crypto.randomUUID()}.${ext}`;
+      const upload = await supabase.storage.from('carwin-vehicle-photos').upload(newPath, photo, { contentType: photo.type });
+      if (upload.error) throw upload.error;
+    }
+    const payload = { ...data, plate: data.plate.toUpperCase(), ...(newPath ? {photo_path:newPath} : removePhoto ? {photo_path:null} : {}) };
     const result = id
       ? await supabase.from('carwin_vehicles').update(payload).eq('id', id).select().maybeSingle()
       : await supabase.from('carwin_vehicles').insert(payload).select().maybeSingle();
-    if (result.error || !result.data) throw result.error ?? new Error('No se pudo guardar');
+    if (result.error || !result.data) {
+      if (newPath) await supabase.storage.from('carwin-vehicle-photos').remove([newPath]);
+      throw result.error ?? new Error('No se pudo guardar');
+    }
+    if (oldPath && (newPath || removePhoto)) {
+      const cleanup = await supabase.storage.from('carwin-vehicle-photos').remove([oldPath]);
+      if (cleanup.error) setError('Vehículo guardado; no se pudo eliminar la fotografía anterior.');
+    }
     if (id) setVehicles((items) => items.map((item) => item.id === id ? result.data as Vehicle : item));
     else setVehicles((items) => upsertRow(items, result.data as Vehicle));
     setShowVehicleForm(false);
@@ -510,14 +527,26 @@ const filtered = expenses.filter((item) => item.expense_date.startsWith(showAllY
 <div className="expense-total"><div><span>Total {showAllYear ? `año ${selectedYear}` : monthName}</span><strong>{money(total)}</strong></div><div className="expense-total-icon"><ReceiptText size={22} /></div></div><div className="stock-tabs"><button className={!showAllYear ? 'active' : ''} onClick={() => setShowAllYear(false)}>{monthName.charAt(0).toUpperCase() + monthName.slice(1)}</button><button className={showAllYear ? 'active' : ''} onClick={() => setShowAllYear(true)}>Todo el año</button></div><section className="summary-card"><div className="section-heading compact"><div><p className="eyebrow">CONSOLIDADO POR CONCEPTO</p><h3>Resumen de gastos</h3></div></div>{Object.entries(grouped).length ? Object.entries(grouped).map(([description, amount]) => <div className="summary-line" key={description}><span>{description}</span><strong>{money(amount)}</strong></div>) : <EmptyState text="Aún no hay gastos registrados en este período." />}</section><section className="section-heading compact"><div><p className="eyebrow">MOVIMIENTOS</p><h3>Detalle día a día</h3></div></section><section className="expense-list">{filtered.map((e) => <div className="expense-row" key={e.id}><div className="expense-dot"><ReceiptText size={17} /></div><div className="expense-info"><strong>{e.description}</strong><span>{dateLabel(e.expense_date)} · Gasto de oficina</span></div><strong className="expense-amount">{money(e.amount)}</strong>{isAdmin && <button className="row-action danger" onClick={() => onDelete(e.id)}><Trash2 size={17} /></button>}</div>)}</section></>;
 }
 
+function VehiclePhoto({ path, large = false }: { path?: string | null; large?: boolean }) {
+  const [url, setUrl] = useState('');
+  useEffect(() => {
+    let active = true; setUrl('');
+    if (!path) return;
+    const refresh = () => { void supabase.storage.from('carwin-vehicle-photos').createSignedUrl(path, 900).then(({data,error}) => { if (active) setUrl(error ? '' : data?.signedUrl || ''); }); };
+    refresh(); const timer = window.setInterval(refresh, 720000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [path]);
+  return <div className={`vehicle-avatar ${large ? 'large' : ''}`} style={url ? {width:large?112:90,flexBasis:large?112:90,height:large?76:62,overflow:'hidden',padding:0} : undefined}>{url ? <img src={url} alt="Fotografía del vehículo" onError={()=>setUrl('')} style={{width:'100%',height:'100%',objectFit:'cover'}}/> : <CarFront size={23}/>}</div>;
+}
+
 function VehicleRow({ isAdmin, vehicle, margin, expenseTotal, onSell, onManageExpenses }: { isAdmin: boolean; vehicle: Vehicle; margin: number; expenseTotal: number; onSell: () => void; onManageExpenses: () => void }) {
   const days = daysBetween(vehicle.entered_at);
-return <div className={`vehicle-row ${margin < 0 ? 'negative-row' : ''}`}><div className="vehicle-avatar"><CarFront size={22} /></div><div className="vehicle-main"><strong>{vehicle.model}</strong><div><span>{typeLabel(vehicle.vehicle_type)}</span><i /> <span>{days} días en stock</span></div></div><div className="vehicle-cost"><span>Gastos acumulados</span><strong>{money(expenseTotal)}</strong></div><div className="vehicle-margin"><span>Margen real</span><strong className={margin < 0 ? 'negative' : ''}>{money(margin)}</strong></div><button className="row-action" onClick={onManageExpenses} title="Gastos del vehículo"><Wallet size={17} /></button>{isAdmin && <button className="sell-button" onClick={onSell}>Vender</button>}</div>;
+return <div className={`vehicle-row ${margin < 0 ? 'negative-row' : ''}`}><VehiclePhoto path={vehicle.photo_path}/><div className="vehicle-main"><strong>{vehicle.model}</strong><div><span>{typeLabel(vehicle.vehicle_type)}</span><i /> <span>{days} días en stock</span></div></div><div className="vehicle-cost"><span>Gastos acumulados</span><strong>{money(expenseTotal)}</strong></div><div className="vehicle-margin"><span>Margen real</span><strong className={margin < 0 ? 'negative' : ''}>{money(margin)}</strong></div><button className="row-action" onClick={onManageExpenses} title="Gastos del vehículo"><Wallet size={17} /></button>{isAdmin && <button className="sell-button" onClick={onSell}>Vender</button>}</div>;
 }
 
 function InventoryCard({ isAdmin, vehicle, sale, expenseTotal, margin, onEdit, onDelete, onSell, onEditSale, onRestoreSale, onManageExpenses, onContract }: { isAdmin: boolean; vehicle: Vehicle; sale?: Sale; expenseTotal: number; margin: number; onEdit: () => void; onDelete: () => void; onSell: () => void; onEditSale: (sale: Sale) => void; onRestoreSale: (sale: Sale) => void; onManageExpenses: () => void; onContract: () => void }) {
   const days = daysBetween(vehicle.entered_at); const aging = days > 90 ? 'red' : days > 60 ? 'yellow' : 'green'; const documentCount = expiringDocuments(vehicle); const hasAlert = documentCount > 0 || aging === 'red' || margin < 0;
-  return <article className={`inventory-card ${hasAlert ? 'has-risk' : ''}`}><div className="card-top"><div className="vehicle-avatar large"><CarFront size={23} /></div><div className="card-title"><strong>{vehicle.model}</strong><span>{vehicle.plate || 'PATENTE PENDIENTE'} · {vehicle.color}</span></div><button className="more-button"><MoreHorizontal size={20} /></button></div><div className="tag-row"><span className={`type-tag ${vehicle.vehicle_type}`}>{vehicle.vehicle_type === 'virtual_consignment' ? 'Virtual' : vehicle.vehicle_type === 'own' ? 'Propio' : 'Físico'}</span>{vehicle.status === 'sold' && <span className="sold-tag"><Check size={12} /> Vendido</span>}<span className={`aging-tag ${aging}`}><i /> {days} días</span>{documentCount > 0 && <span className="doc-tag"><AlertTriangle size={13} /> {documentCount} alerta{documentCount > 1 ? 's' : ''}</span>}</div><div className="price-grid"><div><small>Precio compra</small><strong>{money(vehicle.purchase_price)}</strong></div><div><small>Precio venta</small><strong>{money(vehicle.sale_price)}</strong></div><div><small>Margen real</small><strong className={margin < 0 ? 'negative' : 'positive'}>{money(margin)}</strong></div></div><div className="expense-balance"><span><Wallet size={14} /> Gastos acumulados</span><strong>{money(expenseTotal)}</strong></div><div className="card-footer"><span><Clock3 size={15} /> Ingreso {dateLabel(vehicle.entered_at)}</span><div><button className="row-action" onClick={onManageExpenses} title="Gastos"><Wallet size={16} /></button>{isAdmin && <><button className="row-action" onClick={onEdit}><Pencil size={16} /></button><button className="row-action" onClick={onDelete}><Trash2 size={16} /></button></>}{isAdmin && vehicle.status === 'active' && <button className="mini-sell"onClick={onSell}>Vender</button>}{isAdmin && vehicle.status === 'active' && vehicle.vehicle_type !== 'own' && <button className="contract-button" onClick={onContract} title="Generar contrato de consignación"><FileSignature size={15} /> Contrato</button>}{isAdmin && vehicle.status === 'sold' && sale && <><button className="mini-sell edit-sale-button" onClick={() => onEditSale(sale)}>Editar venta</button><button className="restore-button" onClick={() => onRestoreSale(sale)}>Volver a activos</button></>}</div></div></article>;
+  return <article className={`inventory-card ${hasAlert ? 'has-risk' : ''}`}><div className="card-top"><VehiclePhoto path={vehicle.photo_path} large/><div className="card-title"><strong>{vehicle.model}</strong><span>{vehicle.plate || 'PATENTE PENDIENTE'} · {vehicle.color}</span></div><button className="more-button"><MoreHorizontal size={20} /></button></div><div className="tag-row"><span className={`type-tag ${vehicle.vehicle_type}`}>{vehicle.vehicle_type === 'virtual_consignment' ? 'Virtual' : vehicle.vehicle_type === 'own' ? 'Propio' : 'Físico'}</span>{vehicle.status === 'sold' && <span className="sold-tag"><Check size={12} /> Vendido</span>}<span className={`aging-tag ${aging}`}><i /> {days} días</span>{documentCount > 0 && <span className="doc-tag"><AlertTriangle size={13} /> {documentCount} alerta{documentCount > 1 ? 's' : ''}</span>}</div><div className="price-grid"><div><small>Precio compra</small><strong>{money(vehicle.purchase_price)}</strong></div><div><small>Precio venta</small><strong>{money(vehicle.sale_price)}</strong></div><div><small>Margen real</small><strong className={margin < 0 ? 'negative' : 'positive'}>{money(margin)}</strong></div></div><div className="expense-balance"><span><Wallet size={14} /> Gastos acumulados</span><strong>{money(expenseTotal)}</strong></div><div className="card-footer"><span><Clock3 size={15} /> Ingreso {dateLabel(vehicle.entered_at)}</span><div><button className="row-action" onClick={onManageExpenses} title="Gastos"><Wallet size={16} /></button>{isAdmin && <><button className="row-action" onClick={onEdit}><Pencil size={16} /></button><button className="row-action" onClick={onDelete}><Trash2 size={16} /></button></>}{isAdmin && vehicle.status === 'active' && <button className="mini-sell"onClick={onSell}>Vender</button>}{isAdmin && vehicle.status === 'active' && vehicle.vehicle_type !== 'own' && <button className="contract-button" onClick={onContract} title="Generar contrato de consignación"><FileSignature size={15} /> Contrato</button>}{isAdmin && vehicle.status === 'sold' && sale && <><button className="mini-sell edit-sale-button" onClick={() => onEditSale(sale)}>Editar venta</button><button className="restore-button" onClick={() => onRestoreSale(sale)}>Volver a activos</button></>}</div></div></article>;
 }
 
 function Reports({ vehicles, sales, vehicleExpenses, salePayments, officeExpenses, monthPrefix }: { vehicles: Vehicle[]; sales: Sale[]; vehicleExpenses: VehicleExpense[]; salePayments: SalePayment[]; officeExpenses: OfficeExpense[]; monthPrefix: string }) {
@@ -576,12 +605,21 @@ function InfoModal({ onClose }: { onClose: () => void }) {
   return <Modal title="Información CARWIN" onClose={onClose}><div className="bank-card"><div className="bank-brand"><img src="/assets/images/Logo_Oficial.jpeg" alt="CARWIN" className="bank-logo" /><div><strong>CARWIN SpA</strong><span>Datos institucionales</span></div></div><div className="bank-details">{bankText.split('\n').map((line) => <p key={line}>{line}</p>)}</div></div><button className="copy-button" onClick={() => void copy(bankText, 'bank')}>{copied === 'bank' ? <Check size={19} /> : <Copy size={19} />}{copied === 'bank' ? 'Datos copiados' : 'Copiar datos bancarios'}</button><div className="address-card"><div className="address-title"><MapPin size={20} /><strong>Cómo llegar</strong></div><div className="address-details">{ADDRESS_TEXT.split('\n').map((line) => <p key={line}>{line}</p>)}</div><button className="copy-button address-copy" onClick={() => void copy(ADDRESS_TEXT, 'address')}>{copied === 'address' ? <Check size={19} /> : <Copy size={19} />}{copied === 'address' ? 'Dirección copiada' : 'Copiar dirección'}</button></div></Modal>;
 }
 
-function VehicleForm({ vehicle, onClose, onSave }: { vehicle: Vehicle | null; onClose: () => void; onSave: (data: Omit<Vehicle, 'id' | 'status'>, id?: string) => Promise<void> }) {
+function VehicleForm({ vehicle, onClose, onSave }: { vehicle: Vehicle | null; onClose: () => void; onSave: (data: Omit<Vehicle, 'id' | 'status'>, id?: string, photo?: File | null, removePhoto?: boolean) => Promise<void> }) {
   const [form, setForm] = useState<Omit<Vehicle, 'id' | 'status'>>(vehicle ? { ...vehicle, permit_expiry: vehicle.permit_expiry ?? '', soap_expiry: vehicle.soap_expiry ?? '', inspection_expiry: vehicle.inspection_expiry ?? '' } : initialVehicle);
   const [saving, setSaving] = useState(false); const [formError, setFormError] = useState('');
+  const [photo,setPhoto] = useState<File|null>(null); const [removePhoto,setRemovePhoto] = useState(false);
   const update = <K extends keyof typeof form>(key: K, value: typeof form[K]) => setForm((current) => ({ ...current, [key]: value }));
-  const submit = async (event: FormEvent) => { event.preventDefault(); setSaving(true); setFormError(''); try { await onSave(form, vehicle?.id); } catch { setFormError('Revisa los campos e inténtalo nuevamente.'); } finally { setSaving(false); } };
+  const submit = async (event: FormEvent) => { event.preventDefault(); setSaving(true); setFormError(''); try { await onSave(form, vehicle?.id, photo, removePhoto); } catch (error) { setFormError(error instanceof Error ? error.message : 'No se pudo guardar. Revisa los campos y permisos.'); } finally { setSaving(false); } };
   return <Modal title={vehicle ? 'Editar vehículo' : 'Ingresar vehículo'} onClose={onClose} wide><form className="form-grid" onSubmit={submit}>
+    <div className="form-section-title">Fotografía principal</div>
+    <div style={{gridColumn:'1 / -1',display:'grid',gap:10}}>
+      {!removePhoto && !photo && <VehiclePhoto path={vehicle?.photo_path} large/>}
+      <Field label="Cargar o cambiar fotografía"><input type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>{const file=e.target.files?.[0]; if(!file)return; if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>5*1024*1024){setFormError('Usa JPG, PNG o WebP de hasta 5 MB');e.target.value='';return;}setPhoto(file);setRemovePhoto(false);setFormError('');}}/></Field>
+      {photo && <span>{photo.name} · lista para guardar</span>}
+      {(photo || (vehicle?.photo_path && !removePhoto)) && <button type="button" className="secondary-button" onClick={()=>{setPhoto(null);setRemovePhoto(true);}}>Eliminar fotografía al guardar</button>}
+      {removePhoto && <span>Se quitará la fotografía al guardar.</span>}
+    </div>
     <div className="form-section-title">Ficha principal</div>
     <Field label="Modelo"><input value={form.model} onChange={(e) => update('model', e.target.value)} placeholder="Ej. BMW X3 xDrive" /></Field>
     <Field label="Patente"><input value={form.plate} onChange={(e) => update('plate', e.target.value)} placeholder="AB CD 12" /></Field>
