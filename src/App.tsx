@@ -151,7 +151,7 @@ interface GroupedExpense {
 const initialVehicle: Omit<Vehicle, 'id' | 'status'> = {
   model: '', plate: '', kilometers: 0, owners_count: 1, color: '', vehicle_type: 'own',
   purchase_price: 0, sale_price: 0, agreed_price: 0, has_both_keys: false, maintenance_type: 'none',
-  permit_expiry: '', soap_expiry: '', inspection_expiry: '', entered_at: '2026-11-02',
+  permit_expiry: '', soap_expiry: '', inspection_expiry: '', entered_at: todayChile(),
 };
 
 const dateLabel = (value: string | null) => value ? new Intl.DateTimeFormat('es-CL', { day: '2-digit', month: 'short' }).format(new Date(`${value}T12:00:00`)).replace('.', '') : 'Sin fecha';
