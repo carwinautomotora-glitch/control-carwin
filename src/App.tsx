@@ -683,7 +683,26 @@ const pendingBalance = Math.max(0, totalToCollect - totalReceived); Math.max(0, 
 
   return <Modal title={sale ? 'Editar venta realizada' : 'Liquidación para el cliente'} onClose={onClose} wide>
     <Field label="Editar precio de venta real"><input type="number" value={realPrice} onChange={(e) => setRealPrice(e.target.value)} /></Field>
-    <Field label="Editar precio acordado con cliente"><input type="number" value={agreedPrice} onChange={(e) => setAgreedPrice(e.target.value)} /></Field>
+<Field label="Editar precio acordado con cliente"><input type="number" value={agreedPrice} onChange={(e) => setAgreedPrice(e.target.value)} /></Field>
+
+<Field label="Modalidad de transferencia">
+  <select value={transferMode} onChange={(e) => setTransferMode(e.target.value as typeof transferMode)}>
+    <option value="">Seleccionar modalidad</option>
+    <option value="separate">Cobrada aparte al comprador</option>
+    <option value="included">Incluida en el precio - Regalo CARWIN</option>
+    <option value="direct">Pagada directamente por el comprador</option>
+  </select>
+</Field>
+
+{transferMode !== '' && transferMode !== 'direct' && (
+  <Field label="Costo de transferencia ($)">
+    <input type="number" min="0" value={transferCost} onChange={(e) => setTransferCost(Math.max(0, Number(e.target.value) || 0))} />
+  </Field>
+)}
+
+<Field label="Total a cobrar al comprador">
+  <strong>{money(totalToCollect)}</strong>
+</Field>
     <Field label="Fecha de venta"><input type="date" value={soldAt} onChange={(e) => { setSoldAt(e.target.value); if (!stayEdit) setStayDays(isPhysical(vehicle.vehicle_type) ? daysBetweenDates(vehicle.entered_at, e.target.value) : 0); }} /></Field>
     {isPhysical(vehicle.vehicle_type) && <Field label="Días de estadía / estacionamiento"><input type="number" min="1" value={stayDays} onChange={(e) => { setStayDays(Number(e.target.value) || 1); setStayEdit(true); }} /><small className="form-hint">Cálculo automático: {autoStayDays} días. Puedes modificarlo manualmente. Monto: {money(dailyStayCost * stayDays)}</small></Field>}
     <div className="sale-section-title"><span>Datos del comprador</span><small>Para la nota de venta</small></div>
