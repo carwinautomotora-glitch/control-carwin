@@ -106,6 +106,8 @@ interface Sale {
   sold_at: string;
   real_sale_price: number;
   agreed_price: number;
+transfer_mode?: 'separate' | 'included' | 'direct' | null;
+transfer_cost?: number | null;
   charged_expense_ids: string[];
   final_transfer_amount: number;
   parking_charged: boolean;
