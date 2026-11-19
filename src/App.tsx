@@ -295,7 +295,7 @@ function App({ isAdmin = false }: { isAdmin?: boolean }) {
   };
 
   const addVehicleExpense = async (vehicleId: string, description: string, amount: number, expenseType: ExpenseType, allocation: ExpenseAllocation = 'carwin') => {
-    const result = await supabase.from('carwin_vehicle_expenses').insert({ vehicle_id: vehicleId, expense_type: expenseType, description, amount, allocation, expense_date: '2026-11-02' }).select().maybeSingle();
+    const result = await supabase.from('carwin_vehicle_expenses').insert({ vehicle_id: vehicleId, expense_type: expenseType, description, amount, allocation, expense_date: todayChile()}).select().maybeSingle();
     if (result.error || !result.data) throw result.error ?? new Error('No se pudo guardar');
     setVehicleExpenses((items) => [...items, result.data as VehicleExpense]);
   };
