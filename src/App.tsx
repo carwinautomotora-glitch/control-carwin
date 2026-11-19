@@ -383,8 +383,28 @@ function daysBetweenDates(start: string, end: string) {
 
 function calculateSaleUtility(vehicle: Vehicle, sale: Sale, expenses: VehicleExpense[], dailyStayCost = DEFAULT_DAILY_STAY_COST) {
   const charged = new Set(sale.charged_expense_ids ?? []);
-  const assumedExpenses = expenses.filter((expense) => expense.vehicle_id === vehicle.id && !charged.has(expense.id)).reduce((total, expense) => total + (expense.allocation === 'shared' ? expense.amount / 2 : expense.allocation === 'customer' ? 0 : expense.amount), 0);
-  const stay = isPhysical(vehicle.vehicle_type) ? dailyStayCost * daysBetweenDates(vehicle.entered_at, sale.sold_at) : 0;
+
+  const assumedExpenses = expenses
+    .filter((expense) =>
+      expense.vehicle_id === vehicle.id &&
+      !expense.is_daily_stay &&
+      !charged.has(expense.id)
+    )
+    .reduce((total, expense) =>
+      total + (expense.allocation === 'shared'
+        ? expense.amount / 2
+        : expense.allocation === 'customer'
+          ? 0
+          : expense.amount), 0);
+
+  const savedStay = expenses.find((expense) =>
+    expense.vehicle_id === vehicle.id && expense.is_daily_stay
+  );
+
+  const stay = isPhysical(vehicle.vehicle_type)
+    ? (savedStay?.amount ?? dailyStayCost * daysBetweenDates(vehicle.entered_at, sale.sold_at))
+    : 0;
+
   return sale.real_sale_price - vehicle.purchase_price - assumedExpenses - (sale.parking_charged ? 0 : stay);
 }
 
