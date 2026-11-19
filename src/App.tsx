@@ -1043,123 +1043,57 @@ function ConsignmentContractModal({ vehicle, onClose }: { vehicle: Vehicle; onCl
   const [ownerRut, setOwnerRut] = useState('');
   const [ownerPhone, setOwnerPhone] = useState('');
   const [ownerAddress, setOwnerAddress] = useState('');
-  const [commission, setCommission] = useState('5');
-  const [minimumPrice, setMinimumPrice] = useState(vehicle.agreed_price.toString());
-  const [terms, setTerms] = useState('El propietario autoriza a CARWIN SpA a exhibir y gestionar la venta del vehículo. La entrega se realizará contra la liquidación acordada y los gastos previamente informados.');
-  const [generating, setGenerating] = useState(false);
-  const [showPreview, setShowPreview] = useState(false);
-
-  const generatePdf = async () => {
-    setGenerating(true);
+  const [minimumPrice, setMinimumPrice] = useState(String(vehicle.agreed_price || 0));
+  const [publication, setPublication] = useState(String(vehicle.sale_price || 0));
+  const [start, setStart] = useState(todayChile());
+  const [terms, setTerms] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const ref = useRef<HTMLDivElement>(null);
+  const kind = vehicle.vehicle_type === 'physical_consignment' ? 'Consignación física' : 'Consignación virtual';
+  const valid = !!(ownerName.trim() && ownerRut.trim() && start && Number(minimumPrice)>0 && Number(publication)>=Number(minimumPrice) && vehicle.vehicle_type !== 'own');
+  const generate = async (print: boolean) => {
+    if (!valid || !ref.current) return;
+    setBusy(true); setError('');
     try {
-      const pdf = new jsPDF();
-      const left = 18;
-      let y = 20;
-      pdf.setFillColor(16, 43, 79);
-      pdf.rect(0, 0, 210, 32, 'F');
-      let logoDataUrl: string | null = null;
-      try {
-        const logoResp = await fetch('/assets/images/Logo_Oficial.jpeg');
-        const logoBlob = await logoResp.blob();
-        logoDataUrl = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result as string); reader.onerror = reject; reader.readAsDataURL(logoBlob); });
-      } catch { logoDataUrl = null; }
-      if (logoDataUrl) {
-        try { pdf.addImage(logoDataUrl, 'JPEG', left, 4, 22, 22); } catch { /* skip if format fails */ }
-      }
-      pdf.setTextColor(255, 255, 255);
-      pdf.setFontSize(20);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text('CARWIN SpA', left + 26, 16);
-      pdf.setFontSize(10);
-      pdf.setFont('helvetica', 'normal');
-      pdf.text('CONTRATO DE CONSIGNACIÓN VEHICULAR', left + 26, 24);
-      y = 46;
-      pdf.setTextColor(16, 43, 79);
-      pdf.setFontSize(13);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text('1. Datos del propietario', left, y);
-      y += 9;
-      pdf.setTextColor(35, 35, 35);
-      pdf.setFontSize(10);
-      pdf.setFont('helvetica', 'normal');
-      pdf.text(`Nombre: ${ownerName || 'Por completar'}`, left, y);
-      pdf.text(`RUT: ${ownerRut || 'Por completar'}`, 110, y);
-      y += 7;
-      pdf.text(`Teléfono: ${ownerPhone || 'Por completar'}`, left, y);
-      y += 7;
-      pdf.text(`Dirección: ${ownerAddress || 'Por completar'}`, left, y);
-      y += 14;
-      pdf.setTextColor(16, 43, 79);
-      pdf.setFontSize(13);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text('2. Vehículo consignado', left, y);
-      y += 9;
-      pdf.setTextColor(35, 35, 35);
-      pdf.setFontSize(10);
-      pdf.setFont('helvetica', 'normal');
-      pdf.text(`Modelo: ${vehicle.model}`, left, y);
-      pdf.text(`Patente: ${vehicle.plate || 'Pendiente'}`, 110, y);
-      y += 7;
-      pdf.text(`Color: ${vehicle.color || 'Por completar'}`, left, y);
-      pdf.text(`Kilómetros: ${vehicle.kilometers.toLocaleString('es-CL')}`, 110, y);
-      y += 14;
-      pdf.setTextColor(16, 43, 79);
-      pdf.setFontSize(13);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text('3. Condiciones comerciales', left, y);
-      y += 9;
-      pdf.setTextColor(35, 35, 35);
-      pdf.setFontSize(10);
-      pdf.setFont('helvetica', 'normal');
-      pdf.text(`Precio mínimo autorizado: ${money(Number(minimumPrice) || 0)}`, left, y);
-      pdf.text(`Comisión CARWIN: ${commission || '0'}%`, 110, y);
-      y += 12;
-      const wrappedTerms = pdf.splitTextToSize(terms || 'Sin condiciones adicionales.', 174) as string[];
-      pdf.text(wrappedTerms, left, y);
-      y += wrappedTerms.length * 6 + 18;
-      pdf.setTextColor(16, 43, 79);
-      pdf.setFontSize(13);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text('4. Observaciones y firmas', left, y);
-      y += 32;
-      pdf.setDrawColor(90, 90, 90);
-      pdf.line(left, y, 90, y);
-      pdf.line(120, y, 192, y);
-      y += 6;
-      pdf.setTextColor(80, 80, 80);
-      pdf.setFontSize(9);
-      pdf.setFont('helvetica', 'normal');
-      pdf.text('Propietario', 45, y);
-      pdf.text('CARWIN SpA', 145, y);
-      y += 16;
-      pdf.text(`Fecha de emisión: ${dateLabel('2026-11-08')}`, left, y);
-      pdf.save(`contrato-consignacion-${vehicle.model.replace(/[^a-zA-Z0-9]/g, '')}.pdf`);
-    } finally {
-      setGenerating(false);
-    }
+      await document.fonts.ready;
+      const logo = ref.current.querySelector('img'); if (!logo) throw new Error('Logo'); await logo.decode();
+      const lc = document.createElement('canvas'); lc.width=logo.naturalWidth; lc.height=logo.naturalHeight; const ctx=lc.getContext('2d'); if(!ctx) throw new Error('Logo'); ctx.drawImage(logo,0,0); const data=lc.toDataURL('image/png');
+      const canvas = await html2canvas(ref.current,{scale:2,backgroundColor:'#ffffff',useCORS:true,onclone:async doc=>{const paper=doc.querySelector<HTMLElement>('.cw-contract-paper'); if(!paper) throw new Error('Documento'); paper.style.width='760px'; const img=paper.querySelector('img'); if(!img) throw new Error('Logo'); img.src=data; await img.decode(); img.style.width='210px'; img.style.height=`${210*logo.naturalHeight/logo.naturalWidth}px`;}});
+      const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'letter'});
+      const w=195, h=canvas.height*w/canvas.width, ratio=Math.min(1,258/h);
+      pdf.addImage(canvas.toDataURL('image/png'),'PNG',(215.9-w*ratio)/2,10,w*ratio,h*ratio);
+      const filename=`contrato-consignacion-${vehicle.plate || vehicle.id}.pdf`;
+      if(print){pdf.autoPrint(); const win=window.open(String(pdf.output('bloburl')),'_blank'); if(!win){pdf.save(filename);setError('Ventana bloqueada: se descargó el PDF para imprimir.');}} else pdf.save(filename);
+    } catch {setError('No se pudo generar el contrato. Intenta nuevamente.');} finally {setBusy(false);}
   };
-
   return <Modal title="Contrato de consignación" onClose={onClose} wide>
-    <div className="contract-intro"><FileSignature size={24} /><div><strong>{vehicle.model}</strong><span>Completa los datos del propietario para generar el documento.</span></div></div>
     <div className="form-grid contract-form">
-      <Field label="Nombre del propietario" required><input required value={ownerName} onChange={(event) => setOwnerName(event.target.value)} placeholder="Nombre completo" /></Field>
-      <Field label="RUT" required><input required value={ownerRut} onChange={(event) => setOwnerRut(event.target.value)} placeholder="12.345.678-9" /></Field>
-      <Field label="Teléfono"><input value={ownerPhone} onChange={(event) => setOwnerPhone(event.target.value)} placeholder="+56 9 ..." /></Field>
-      <Field label="Dirección"><input value={ownerAddress} onChange={(event) => setOwnerAddress(event.target.value)} placeholder="Dirección del propietario" /></Field>
-      <Field label="Comisión CARWIN (%)"><input min="0" step="0.1" type="number" value={commission} onChange={(event) => setCommission(event.target.value)} /></Field>
-      <Field label="Precio mínimo autorizado"><input min="0" type="number" value={minimumPrice} onChange={(event) => setMinimumPrice(event.target.value)} /></Field>
-      <label className="field contract-terms"><span>Condiciones del acuerdo</span><textarea rows={5} value={terms} onChange={(event) => setTerms(event.target.value)} /></label>
+      <Field label="Nombre del propietario" required><input value={ownerName} onChange={e=>setOwnerName(e.target.value)}/></Field>
+      <Field label="RUT" required><input value={ownerRut} onChange={e=>setOwnerRut(e.target.value)}/></Field>
+      <Field label="Teléfono"><input value={ownerPhone} onChange={e=>setOwnerPhone(e.target.value)}/></Field>
+      <Field label="Dirección"><input value={ownerAddress} onChange={e=>setOwnerAddress(e.target.value)}/></Field>
+      <Field label="Valor acordado para propietario" required><input type="number" min="1" value={minimumPrice} onChange={e=>setMinimumPrice(e.target.value)}/></Field>
+      <Field label="Precio de publicación" required><input type="number" min="1" value={publication} onChange={e=>setPublication(e.target.value)}/></Field>
+      <Field label="Fecha de inicio" required><input type="date" value={start} onChange={e=>setStart(e.target.value)}/></Field>
+      <Field label="Observaciones adicionales"><textarea rows={2} maxLength={240} value={terms} onChange={e=>setTerms(e.target.value)}/></Field>
     </div>
-    <div className="form-actions"><button type="button" className="secondary-button" onClick={onClose}>Cancelar</button><button type="button" className="secondary-button" onClick={() => setShowPreview((v) => !v)}><Eye size={18} />{showPreview ? 'Ocultar vista previa' : 'Ver vista previa'}</button><button type="button" className="primary-button" disabled={generating || !ownerName || !ownerRut} onClick={() => void generatePdf()}><FileText size={18} />{generating ? 'Generando...' : 'Descargar contrato PDF'}</button></div>
-    {showPreview && <div className="contract-preview">
-      <div className="contract-preview-paper">
-        <div className="contract-preview-header"><img src="/assets/images/Logo_Oficial.jpeg" alt="CARWIN" className="contract-preview-logo" /><div><strong>CARWIN SpA</strong><span>CONTRATO DE CONSIGNACIÓN VEHICULAR</span></div></div>
-        <div className="contract-preview-section"><strong>1. Datos del propietario</strong><div className="contract-preview-data"><span><small>Nombre</small><b>{ownerName || 'Por completar'}</b></span><span><small>RUT</small><b>{ownerRut || 'Por completar'}</b></span><span><small>Teléfono</small><b>{ownerPhone || 'Por completar'}</b></span><span><small>Dirección</small><b>{ownerAddress || 'Por completar'}</b></span></div></div>
-        <div className="contract-preview-section"><strong>2. Vehículo consignado</strong><div className="contract-preview-data"><span><small>Modelo</small><b>{vehicle.model}</b></span><span><small>Patente</small><b>{vehicle.plate || 'Pendiente'}</b></span><span><small>Color</small><b>{vehicle.color || 'Por completar'}</b></span><span><small>Kilómetros</small><b>{vehicle.kilometers.toLocaleString('es-CL')}</b></span></div></div>
-        <div className="contract-preview-section"><strong>3. Condiciones comerciales</strong><div className="contract-preview-data"><span><small>Precio mínimo autorizado</small><b>{money(Number(minimumPrice) || 0)}</b></span><span><small>Comisión CARWIN</small><b>{commission || '0'}%</b></span></div><p className="contract-preview-terms">{terms || 'Sin condiciones adicionales.'}</p></div>
-        <div className="contract-preview-section"><strong>4. Observaciones y firmas</strong><div className="contract-preview-signatures"><div><i /><small>Propietario</small></div><div><i /><small>CARWIN SpA</small></div></div><p className="contract-preview-date">Fecha de emisión: {dateLabel('2026-11-08')}</p></div>
-      </div>
-    </div>}
+    <style>{`.cw-contract-paper{background:white;color:#102b4f;padding:24px;box-sizing:border-box;font-size:14px;line-height:1.4;border-radius:8px;overflow-wrap:anywhere}.cw-contract-paper h3{color:#102b4f;margin:12px 0;font-size:23px}.cw-contract-paper h4{background:#eef3f8;color:#102b4f;border-left:4px solid #c9a34c;padding:6px 9px;margin:12px 0 6px;font-size:14px}.cw-contract-paper p{margin:5px 0;color:#102b4f}.cw-contract-paper .cw-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px 18px}.cw-contract-paper small{display:block;color:#536b83}.cw-contract-paper b{color:#102b4f}.cw-contract-paper .cw-head{display:flex;align-items:center;gap:16px;background:#0a1d35;padding:14px;border-bottom:4px solid #d5ad52;border-radius:5px}.cw-contract-paper .cw-head img{width:210px;height:auto}.cw-contract-paper .cw-head strong{color:white;font-size:21px}.cw-contract-paper .cw-head p{color:#e2c982}.cw-contract-paper .cw-sign{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin:65px 0 15px;text-align:center}.cw-contract-paper .cw-sign div{border-top:2px solid #24364b;padding-top:7px}.cw-contract-paper footer{background:#102b4f;color:#e2c982;text-align:center;padding:8px}`}</style>
+    <div ref={ref} className="cw-contract-paper">
+      <div className="cw-head"><img src="/assets/images/Logo_Oficial.jpeg" alt="CARWIN"/><div><strong>CARWIN SpA</strong><p>www.carwin.cl · Vitacura, Santiago</p></div></div>
+      <h3>CONTRATO DE CONSIGNACIÓN VEHICULAR</h3><p>Vitacura · {start || 'Fecha por definir'}</p>
+      <h4>01 / DATOS DEL CONSIGNANTE</h4><div className="cw-grid"><div><small>Nombre</small><b>{ownerName || 'Por completar'}</b></div><div><small>RUT</small><b>{ownerRut || 'Por completar'}</b></div><div><small>Dirección</small><b>{ownerAddress || 'Por completar'}</b></div><div><small>Teléfono</small><b>{ownerPhone || 'Por completar'}</b></div></div>
+      <h4>02 / VEHÍCULO</h4><div className="cw-grid"><div><small>Modelo</small><b>{vehicle.model}</b></div><div><small>Patente</small><b>{vehicle.plate}</b></div><div><small>Kilómetros / color</small><b>{vehicle.kilometers.toLocaleString('es-CL')} · {vehicle.color}</b></div><div><small>Modalidad</small><b>{vehicle.vehicle_type==='own'?'No corresponde':kind}</b></div></div>
+      <h4>03 / ACUERDO COMERCIAL</h4><div className="cw-grid"><div><small>Valor acordado para el propietario</small><b>{money(Number(minimumPrice)||0)}</b></div><div><small>Precio de publicación</small><b>{money(Number(publication)||0)}</b></div></div>
+      <p>El consignante autoriza a CARWIN SpA a publicar y gestionar la venta del vehículo. Toda modificación del valor acordado para el propietario requerirá su autorización. La liquidación se efectuará una vez recibidos y verificados los fondos de la venta y cumplidas las condiciones acordadas.</p>
+      <h4>04 / PLAZO Y COSTO DE GESTIÓN POR RETIRO ANTICIPADO</h4><p>El plazo mínimo de consignación será de 60 días corridos desde la fecha de inicio. Si el consignante solicita voluntariamente el retiro antes de cumplirse dicho plazo, deberá pagar $100.000 más IVA ($119.000), como recuperación parcial de los costos de preparación, gestión comercial, publicación, estacionamiento cuando corresponda y administración. Cumplidos los 60 días, no se aplicará este cobro por retiro anticipado.</p>
+      <p>El consignante declara estar facultado para disponer del vehículo e informar sus antecedentes y limitaciones. CARWIN se compromete a gestionar la comercialización conforme a la modalidad acordada. En consignación virtual, el vehículo permanece bajo custodia del propietario.</p>
+      {terms.trim() && <p><b>Observaciones:</b> {terms}</p>}
+      <div className="cw-sign"><div>Firma del consignante</div><div>Firma CARWIN SpA</div></div><footer>Gracias por confiar en CARWIN · www.carwin.cl</footer>
+    </div>
+    <p className="muted">Los datos editados se aplican al documento; no modifican el stock ni se guardan en la base de datos.</p>
+    {error && <p>{error}</p>}
+    <div className="form-actions"><button className="secondary-button" onClick={()=>void generate(true)} disabled={!valid||busy}>Imprimir contrato</button><button className="primary-button" onClick={()=>void generate(false)} disabled={!valid||busy}>Descargar contrato PDF</button><button className="secondary-button" onClick={onClose}>Cerrar</button></div>
   </Modal>;
 }
 
