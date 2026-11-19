@@ -871,13 +871,16 @@ function SaleNoteModal({ vehicle, sale, payments, buyerData, onClose }: { vehicl
       .carwin-note-premium .note-brand h3,.carwin-note-premium .note-folio strong {color:#fff;}
       .carwin-note-premium .note-brand span,.carwin-note-premium .note-folio span {color:#e2c982;}
       .carwin-note-premium .note-document-title {font-size:25px;color:#102b4f;margin:8px 0;letter-spacing:1px;}
-      .carwin-note-premium .note-section {margin-bottom:12px;}
+      .carwin-note-premium .note-section {margin-bottom:8px;}
       .carwin-note-premium .note-section-title {text-transform:uppercase;background:#eef3f8;border-left:4px solid #c9a34c;padding:7px 10px;margin-bottom:6px;}
       .carwin-note-premium .note-data-grid,.carwin-note-premium .note-vehicle-grid {gap:6px;}
+      .carwin-note-premium .note-vehicle-grid {display:grid;grid-template-columns:minmax(0,2.5fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1fr);gap:10px;}
       .carwin-note-premium .note-data-grid>div,.carwin-note-premium .note-vehicle-grid>div {padding:4px 0;overflow-wrap:anywhere;}
       .carwin-note-premium .note-finance-row {padding:7px 10px;}
-      .carwin-note-premium .note-signatures {margin:18px 0;padding-top:8px;}
-      .carwin-note-premium .note-sig span {margin-bottom:26px;}
+      .carwin-note-premium .note-signatures {display:grid;grid-template-columns:1fr 1fr;gap:40px;margin:8px 0 14px;padding-top:0;}
+      .carwin-note-premium .note-sig {padding-top:70px;text-align:center;}
+      .carwin-note-premium .note-sig div {display:block;width:100%;height:2px;background:#24364b;border:0;margin:0 0 8px;}
+      .carwin-note-premium .note-sig span {display:block;margin:0;color:#102b4f;font-size:12px;font-weight:600;}
       .carwin-note-premium .note-premium-footer {background:#102b4f;color:#f4da92;padding:10px;text-align:center;font-weight:700;font-size:12px;}
     `}</style>
     <div className="sale-note carwin-note-premium" ref={noteRef}>
@@ -919,8 +922,8 @@ function SaleNoteModal({ vehicle, sale, payments, buyerData, onClose }: { vehicl
         <div className="note-payments">{payments.map((payment) => <div className="note-payment-row" key={payment.id}><span>{paymentMethodLabel(payment.method)} · {dateLabel(payment.payment_date)}{payment.operation_reference ? ` · ${payment.operation_reference}` : ''}</span><strong>{money(payment.amount)}</strong><b className={payment.verified ? 'verified-payment' : 'pending-payment'}>{payment.verified ? 'Verificado' : 'Pendiente'}</b></div>)}</div>
       </div>}
       <div className="note-section-title">04 / Firmas</div><div className="note-signatures">
-        <div className="note-sig"><span>CARWIN SpA</span><div /></div>
-        <div className="note-sig"><span>Comprador</span><div /></div>
+        <div className="note-sig"><div /><span>Firma CARWIN SpA</span></div>
+        <div className="note-sig"><div /><span>Firma del comprador</span></div>
       </div>
       <div className="note-premium-footer">Gracias por confiar en CARWIN · www.carwin.cl</div>
     </div>
