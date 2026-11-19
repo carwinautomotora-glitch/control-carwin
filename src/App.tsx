@@ -637,7 +637,7 @@ function SaleModal({ vehicle, sale, dailyStayCost, monthPrefix, payments, onAddP
   const addExtra = async () => { if (!newExpense) return; await onAddExpense(vehicle.id, newExpense, Number(newAmount) || 0, newExpenseType); setNewExpense(''); setNewAmount(''); };
   const addPayment = async () => { if (!sale || !Number(paymentAmount)) return; await onAddPayment(sale.id, { payment_date: paymentDate, method: paymentMethod, amount: Number(paymentAmount), bank: paymentBank, operation_reference: paymentReference, receipt_url: null, verified: paymentVerified, notes: '' }); setPaymentAmount(''); setPaymentBank(''); setPaymentReference(''); setPaymentVerified(false); };
   const totalReceived = payments.filter((payment) => payment.verified).reduce((sum, payment) => sum + payment.amount, 0);
-  const pendingBalance = Math.max(0, Number(agreedPrice || 0) - totalReceived);
+const pendingBalance = Math.max(0, Number(realPrice || 0) - totalReceived);
   const handleSold = async () => { setSaving(true); try { await onSold(selected, finalAmount, Number(realPrice), Number(agreedPrice), { buyer_name: buyerName, buyer_rut: buyerRut, buyer_address: buyerAddress, buyer_phone: buyerPhone, delivery_date: deliveryDate || null, terms }, soldAt, stayEdit ? stayDays : undefined); } finally { setSaving(false); } };
   const buyerData = { buyer_name: buyerName, buyer_rut: buyerRut, buyer_address: buyerAddress, buyer_phone: buyerPhone, delivery_date: deliveryDate || null, terms };
 
