@@ -431,7 +431,32 @@ const filtered = expenses.filter((item) => item.expense_date.startsWith(showAllY
   const total = filtered.reduce((sum, item) => sum + item.amount, 0);
   const grouped = filtered.reduce<Record<string, number>>((acc, item) => { acc[item.description] = (acc[item.description] ?? 0) + item.amount; return acc; }, {});
  const monthName = new Intl.DateTimeFormat('es-CL', { month: 'long', year: 'numeric' }).format(new Date(`${selectedPeriod}-15T12:00:00`));
-  return <><section className="page-heading"><div><p className="eyebrow">CONTROL FINANCIERO</p><h2>Gastos de <span>oficina</span></h2><p className="muted">Cada peso queda trazable y consolidado.</p></div>{isAdmin && <button className="primary-button" onClick={onAdd}><Plus size={20} /> Registrar gasto</button>}</section><div className="expense-total"><div><span>Total {showAllYear ? 'año' : monthName}</span><strong>{money(total)}</strong></div><div className="expense-total-icon"><ReceiptText size={22} /></div></div><div className="stock-tabs"><button className={!showAllYear ? 'active' : ''} onClick={() => setShowAllYear(false)}>{monthName.charAt(0).toUpperCase() + monthName.slice(1)}</button><button className={showAllYear ? 'active' : ''} onClick={() => setShowAllYear(true)}>Todo el año</button></div><section className="summary-card"><div className="section-heading compact"><div><p className="eyebrow">CONSOLIDADO POR CONCEPTO</p><h3>Resumen de gastos</h3></div></div>{Object.entries(grouped).length ? Object.entries(grouped).map(([description, amount]) => <div className="summary-line" key={description}><span>{description}</span><strong>{money(amount)}</strong></div>) : <EmptyState text="Aún no hay gastos registrados en este período." />}</section><section className="section-heading compact"><div><p className="eyebrow">MOVIMIENTOS</p><h3>Detalle día a día</h3></div></section><section className="expense-list">{filtered.map((e) => <div className="expense-row" key={e.id}><div className="expense-dot"><ReceiptText size={17} /></div><div className="expense-info"><strong>{e.description}</strong><span>{dateLabel(e.expense_date)} · Gasto de oficina</span></div><strong className="expense-amount">{money(e.amount)}</strong>{isAdmin && <button className="row-action danger" onClick={() => onDelete(e.id)}><Trash2 size={17} /></button>}</div>)}</section></>;
+  return <><section className="page-heading"><div><p className="eyebrow">CONTROL FINANCIERO</p><h2>Gastos de <span>oficina</span></h2><p className="muted">Cada peso queda trazable y consolidado.</p></div>{isAdmin && <button className="primary-button" onClick={onAdd}><Plus size={20} /> Registrar gasto</button>}</section><div style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}>
+  <select
+    value={selectedMonth}
+    onChange={(e) => {
+      setSelectedMonth(e.target.value);
+      setShowAllYear(false);
+    }}
+    style={{ flex: 1, padding: '12px', background: '#123456', color: '#ffffff', border: '1px solid #38bdf8', borderRadius: '10px', fontSize: '16px' }}
+  >
+    {['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'].map((month, index) => (
+      <option key={index} value={String(index + 1).padStart(2, '0')}>
+        {month}
+      </option>
+    ))}
+  </select>
+  <select
+    value={selectedYear}
+    onChange={(e) => setSelectedYear(e.target.value)}
+    style={{ flex: 1, padding: '12px', background: '#123456', color: '#ffffff', border: '1px solid #38bdf8', borderRadius: '10px', fontSize: '16px' }}
+  >
+    {availableYears.map((year) => (
+      <option key={year} value={year}>{year}</option>
+    ))}
+  </select>
+</div>
+<div className="expense-total"><div><span>Total {showAllYear ? 'año' : monthName}</span><strong>{money(total)}</strong></div><div className="expense-total-icon"><ReceiptText size={22} /></div></div><div className="stock-tabs"><button className={!showAllYear ? 'active' : ''} onClick={() => setShowAllYear(false)}>{monthName.charAt(0).toUpperCase() + monthName.slice(1)}</button><button className={showAllYear ? 'active' : ''} onClick={() => setShowAllYear(true)}>Todo el año</button></div><section className="summary-card"><div className="section-heading compact"><div><p className="eyebrow">CONSOLIDADO POR CONCEPTO</p><h3>Resumen de gastos</h3></div></div>{Object.entries(grouped).length ? Object.entries(grouped).map(([description, amount]) => <div className="summary-line" key={description}><span>{description}</span><strong>{money(amount)}</strong></div>) : <EmptyState text="Aún no hay gastos registrados en este período." />}</section><section className="section-heading compact"><div><p className="eyebrow">MOVIMIENTOS</p><h3>Detalle día a día</h3></div></section><section className="expense-list">{filtered.map((e) => <div className="expense-row" key={e.id}><div className="expense-dot"><ReceiptText size={17} /></div><div className="expense-info"><strong>{e.description}</strong><span>{dateLabel(e.expense_date)} · Gasto de oficina</span></div><strong className="expense-amount">{money(e.amount)}</strong>{isAdmin && <button className="row-action danger" onClick={() => onDelete(e.id)}><Trash2 size={17} /></button>}</div>)}</section></>;
 }
 
 function VehicleRow({ isAdmin, vehicle, margin, expenseTotal, onSell, onManageExpenses }: { isAdmin: boolean; vehicle: Vehicle; margin: number; expenseTotal: number; onSell: () => void; onManageExpenses: () => void }) {
