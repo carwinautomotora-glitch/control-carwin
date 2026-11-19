@@ -613,7 +613,7 @@ function VehicleExpenseModal({ isAdmin, vehicle, expenses, dailyStayCost, onClos
 function SaleModal({ vehicle, sale, dailyStayCost, monthPrefix, payments, onAddPayment, onDeletePayment, expenses, onClose, onAddExpense, onSold }: { vehicle: Vehicle; sale?: Sale; dailyStayCost: number; monthPrefix: string; payments: SalePayment[]; onAddPayment: (saleId: string, payment: Omit<SalePayment, 'id' | 'sale_id'>) => Promise<void>; onDeletePayment: (id: string) => Promise<void>; expenses: VehicleExpense[]; onClose: () => void; onAddExpense: (vehicleId: string, description: string, amount: number, expenseType: ExpenseType) => Promise<void>; onSold: (selectedExpenseIds: string[], finalTransferAmount: number, realSalePrice: number, agreedPrice: number, buyer: { buyer_name: string; buyer_rut: string; buyer_address: string; buyer_phone: string; delivery_date: string | null; terms: string }, soldAt: string, stayDaysOverride?: number) => Promise<void> }) {
   const [transferMode, setTransferMode] = useState<'separate' | 'included' | 'direct' | ''>(sale?.transfer_mode ?? '');
 const [transferCost, setTransferCost] = useState(sale?.transfer_cost ?? 0);
-const defaultSoldAt = sale?.sold_at ?? todayChile();const defaultSoldAt = sale?.sold_at ?? todayChile();
+const defaultSoldAt = sale?.sold_at ?? todayChile();
   const [soldAt, setSoldAt] = useState(defaultSoldAt);
   const autoStayDays = isPhysical(vehicle.vehicle_type) ? daysBetweenDates(vehicle.entered_at, soldAt) : 0;
   const [stayDays, setStayDays] = useState(autoStayDays);
