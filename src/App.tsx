@@ -827,51 +827,48 @@ function SaleNoteModal({ vehicle, sale, payments, buyerData, onClose }: { vehicl
   const noteRef = useRef<HTMLDivElement>(null);
   const [printing, setPrinting] = useState(false);
 
-  const handlePrint = async () => {
+  const [noteError, setNoteError] = useState('');
+  const handlePrint = async (print = false) => {
     if (!noteRef.current) return;
-    setPrinting(true);
+    setPrinting(true); setNoteError('');
     try {
-      const fontCs = `@font-face{font-family:'DM Sans';font-style:normal;font-weight:400;src:url(https://fonts.gstatic.com/s/dmsans/v15/PumbUy5fUHfnkB_nt5YDaw.woff2) format('woff2');}@font-face{font-family:'DM Sans';font-style:normal;font-weight:600;src:url(https://fonts.gstatic.com/s/dmsans/v15/U8YNi5H5OZ3RskChRwBgTw.woff2) format('woff2');}@font-face{font-family:'DM Sans';font-style:normal;font-weight:700;src:url(https://fonts.gstatic.com/s/dmsans/v15/ifopbHfUnBAwPudRyITdzQ.woff2) format('woff2');}@font-face{font-family:'Space Grotesk';font-style:normal;font-weight:600;src:url(https://fonts.gstatic.com/s/spacegrotesk/v16/FMidRyI5HfLPot/2ld/876W.woff2) format('woff2');}@font-face{font-family:'Space Grotesk';font-style:normal;font-weight:700;src:url(https://fonts.gstatic.com/s/spacegrotesk/v16/FMid_gFyI5HfLPot/2ld/876W.woff2) format('woff2');}`;
-      const node = noteRef.current;
-      const width = Math.max(node.scrollWidth, 800);
-      const height = node.scrollHeight;
-      const clone = node.cloneNode(true) as HTMLElement;
-      clone.style.width = `${width}px`;
-      const html = `<foreignObject x="0" y="0" width="${width}" height="${height}"><div xmlns="http://www.w3.org/1999/xhtml" style="font-family:'DM Sans',sans-serif;width:${width}px;height:${height}px;">${clone.innerHTML}</div></foreignObject>`;
-      const svgString = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><style>${fontCs}</style>${html}</svg>`;
-      const svgDataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgString)}`;
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.src = svgDataUrl;
-      await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; });
-      const canvas = document.createElement('canvas');
-      canvas.width = width * 2;
-      canvas.height = height * 2;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.scale(2, 2);
-      ctx.drawImage(img, 0, 0);
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF({ orientation: 'portrait', unit: 'px', format: [width, height] });
-      pdf.addImage(imgData, 'PNG', 0, 0, width, height);
-      pdf.save(`nota-venta-${sale.folio}.pdf`);
-    } catch {
-      window.print();
-    } finally {
-      setPrinting(false);
-    }
+      await document.fonts.ready;
+      const canvas = await html2canvas(noteRef.current, { backgroundColor: '#ffffff', scale: 2, useCORS: true, onclone: (doc) => { const n = doc.querySelector<HTMLElement>('.carwin-note-premium'); if(n) n.style.width = '760px'; } });
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' });
+      const w = 195, h = canvas.height * w / canvas.width;
+      const ratio = Math.min(1, 258 / h);
+      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', (215.9 - w * ratio)/2, 10, w * ratio, h * ratio);
+      if (print) { pdf.autoPrint(); const url = pdf.output('bloburl'); const win = window.open(String(url), '_blank'); if (!win) { pdf.save(`nota-venta-${sale.folio}.pdf`); setNoteError('Ventana bloqueada. Se descargó el PDF para imprimir.'); } }
+      else pdf.save(`nota-venta-${sale.folio}.pdf`);
+    } catch { setNoteError('No se pudo generar el PDF. Intenta nuevamente.'); }
+    finally { setPrinting(false); }
   };
 
   return <Modal title="Nota de venta" onClose={onClose} wide>
-    <div className="sale-note" ref={noteRef}>
+    <style>{`
+      .carwin-note-premium {color:#102B4F;background:#fff;padding:24px;font-size:14px;border-radius:8px;}
+      .carwin-note-premium .note-header {background:#0a1d35;border-bottom:4px solid #d5ad52;padding:16px;margin-bottom:14px;border-radius:6px;gap:12px;align-items:center;}
+      .carwin-note-premium .note-brand {flex-wrap:wrap;gap:8px;}
+      .carwin-note-premium .note-logo {width:210px;height:90px;object-fit:contain;background:#0a1d35;border:0;padding:0;border-radius:0;}
+      .carwin-note-premium .note-brand h3,.carwin-note-premium .note-folio strong {color:#fff;}
+      .carwin-note-premium .note-brand span,.carwin-note-premium .note-folio span {color:#e2c982;}
+      .carwin-note-premium .note-document-title {font-size:25px;color:#102b4f;margin:8px 0;letter-spacing:1px;}
+      .carwin-note-premium .note-section {margin-bottom:12px;}
+      .carwin-note-premium .note-section-title {text-transform:uppercase;background:#eef3f8;border-left:4px solid #c9a34c;padding:7px 10px;margin-bottom:6px;}
+      .carwin-note-premium .note-data-grid,.carwin-note-premium .note-vehicle-grid {gap:6px;}
+      .carwin-note-premium .note-data-grid>div,.carwin-note-premium .note-vehicle-grid>div {padding:4px 0;overflow-wrap:anywhere;}
+      .carwin-note-premium .note-finance-row {padding:7px 10px;}
+      .carwin-note-premium .note-signatures {margin:18px 0;padding-top:8px;}
+      .carwin-note-premium .note-sig span {margin-bottom:26px;}
+      .carwin-note-premium .note-premium-footer {background:#102b4f;color:#f4da92;padding:10px;text-align:center;font-weight:700;font-size:12px;}
+    `}</style>
+    <div className="sale-note carwin-note-premium" ref={noteRef}>
       <div className="note-header">
-        <div className="note-brand"><img src="/assets/images/Logo_Oficial.jpeg" alt="CARWIN" className="note-logo" /><div><h3>CARWIN SpA</h3><span>Automotora · Nota de venta</span></div></div>
+        <div className="note-brand"><img src="/assets/images/Logo_Oficial.jpeg" alt="CARWIN" className="note-logo" /><div><h3>CARWIN SpA</h3><span>www.carwin.cl · Vitacura, Santiago</span></div></div>
         <div className="note-folio"><span>Folio</span><strong>{sale.folio}</strong></div>
       </div>
-      <div className="note-date"><span>Vitacura, {fullDate}</span></div>
-      <div className="note-section"><div className="note-section-title">Datos del comprador</div>
+      <h2 className="note-document-title">NOTA DE VENTA</h2><div className="note-date"><span>Vitacura, {fullDate}</span></div>
+      <div className="note-section"><div className="note-section-title">01 / Datos del comprador</div>
         <div className="note-data-grid">
           <div><small>Nombre</small><strong>{buyerData.buyer_name || 'Por completar'}</strong></div>
           <div><small>RUT</small><strong>{buyerData.buyer_rut || 'Por completar'}</strong></div>
@@ -880,35 +877,38 @@ function SaleNoteModal({ vehicle, sale, payments, buyerData, onClose }: { vehicl
           <div><small>Fecha entrega</small><strong>{buyerData.delivery_date ? dateLabel(buyerData.delivery_date) : 'Por definir'}</strong></div>
         </div>
       </div>
-      <div className="note-section"><div className="note-section-title">Vehículo</div>
+      <div className="note-section"><div className="note-section-title">02 / Identificación del vehículo</div>
         <div className="note-vehicle-grid">
           <div><small>Modelo</small><strong>{vehicle.model}</strong></div>
           <div><small>Patente</small><strong>{vehicle.plate || 'Pendiente'}</strong></div>
           <div><small>Kilómetros</small><strong>{vehicle.kilometers.toLocaleString('es-CL')}</strong></div>
           <div><small>Color</small><strong>{vehicle.color}</strong></div>
-          <div><small>Tipo</small><strong>{typeLabel(vehicle.vehicle_type)}</strong></div>
+          
           
         </div>
       </div>
       {buyerData.terms && <div className="note-section"><div className="note-section-title">Condiciones</div><p className="note-terms">{buyerData.terms}</p></div>}
-      <div className="note-section"><div className="note-section-title">Detalle financiero</div>
+      <div className="note-section"><div className="note-section-title">03 / Condiciones comerciales</div>
         <div className="note-finance-table">
-          <div className="note-finance-row total"><span>Precio venta real</span><strong>{money(sale.real_sale_price)}</strong></div>
+          <div className="note-finance-row total"><span>Precio de venta acordado</span><strong>{money(sale.real_sale_price)}</strong></div>
           <div className="note-finance-row"><span>Transferencia</span><strong>{sale.transfer_mode === 'direct' ? 'Pago directo comprador' : sale.transfer_mode === 'included' ? 'Incluida en precio' : sale.transfer_mode === 'separate' ? money(sale.transfer_cost ?? 0) : 'Por confirmar'}</strong></div>
-          <div className="note-finance-row"><span>Total a cobrar</span><strong>{money(sale.real_sale_price + (sale.transfer_mode === 'separate' ? sale.transfer_cost ?? 0 : 0))}</strong></div>
-          <div className="note-finance-row"><span>Pagos verificados</span><strong>{money(totalReceived)}</strong></div>
+          <div className="note-finance-row"><span>Total a pagar a CARWIN</span><strong>{money(sale.real_sale_price + (sale.transfer_mode === 'separate' ? sale.transfer_cost ?? 0 : 0))}</strong></div>
+          <div className="note-finance-row"><span>Pagos recibidos y verificados</span><strong>{money(totalReceived)}</strong></div>
           <div className="note-finance-row"><span>Saldo pendiente</span><strong>{money(Math.max(0, sale.real_sale_price + (sale.transfer_mode === 'separate' ? sale.transfer_cost ?? 0 : 0) - totalReceived))}</strong></div>
         </div>
       </div>
       {payments.length > 0 && <div className="note-section"><div className="note-section-title">Pagos registrados</div>
         <div className="note-payments">{payments.map((payment) => <div className="note-payment-row" key={payment.id}><span>{paymentMethodLabel(payment.method)} · {dateLabel(payment.payment_date)}{payment.operation_reference ? ` · ${payment.operation_reference}` : ''}</span><strong>{money(payment.amount)}</strong><b className={payment.verified ? 'verified-payment' : 'pending-payment'}>{payment.verified ? 'Verificado' : 'Pendiente'}</b></div>)}</div>
       </div>}
-      <div className="note-signatures">
+      <div className="note-section-title">04 / Firmas</div><div className="note-signatures">
         <div className="note-sig"><span>CARWIN SpA</span><div /></div>
         <div className="note-sig"><span>Comprador</span><div /></div>
       </div>
+      <div className="note-premium-footer">Gracias por confiar en CARWIN · www.carwin.cl</div>
     </div>
     <div className="sale-actions">
+      {noteError && <p className="form-error">{noteError}</p>}
+      <button className="secondary-button" onClick={() => void handlePrint(true)} disabled={printing}>Imprimir nota de venta</button>
       <button className="copy-button" onClick={() => void handlePrint()} disabled={printing}><FileText size={18} />{printing ? 'Generando PDF...' : 'Descargar nota de venta (PDF)'}</button>
       <button className="primary-button" onClick={onClose}>Cerrar</button>
     </div>
